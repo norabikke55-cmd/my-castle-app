@@ -1,0 +1,8 @@
+{
+  "name": "my-castle-app",
+  "short_name": "castle",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "description": "Castle Log App"
+}
