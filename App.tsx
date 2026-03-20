@@ -1,3 +1,43 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, collection, onSnapshot, doc, deleteDoc, setDoc, writeBatch 
+} from 'firebase/firestore';
+import { 
+  getAuth, signInAnonymously, onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  Search, Calendar, Trash2, Plus, Star, X, Settings, 
+  Edit3, MapPin, Download, FileUp, ExternalLink, 
+  Loader2, Save, ArrowUp, ArrowDown, FileText
+} from 'lucide-react';
+
+// --- Firebase Config (StackBlitz 用) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyBWBUJ3D0ArkjYBcknRXE4d8n_nc_Jumq0",
+  authDomain: "castle-104.firebaseapp.com",
+  projectId: "castle-104",
+  storageBucket: "castle-104.firebasestorage.app",
+  messagingSenderId: "214626260016",
+  appId: "1:214626260016:web:8c7a036689295a074d09f5"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = 'castle-log-v7-stable';
+
+// 都道府県の並び順
+const PREF_ORDER = [
+  "北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県",
+  "茨城県","栃木県","群馬県","埼玉県","千葉県","東京都","神奈川県",
+  "新潟県","富山県","石川県","福井県","山梨県","長野県","岐阜県","静岡県","愛知県",
+  "三重県","滋賀県","京都府","大阪府","兵庫県","奈良県","和歌山県",
+  "鳥取県","島根県","岡山県","広島県","山口県",
+  "徳島県","香川県","愛媛県","高知県",
+  "福岡県","佐賀県","長崎県","熊本県","大分県","宮崎県","鹿児島県","沖縄県"
+];
+
 // --- 城アイコン ---
 const CastleIcon = () => (
   <div className="relative w-12 h-12 flex items-center justify-center overflow-hidden">
