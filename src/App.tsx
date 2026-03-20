@@ -12,19 +12,8 @@ import {
   Loader2, Save, ArrowUp, ArrowDown, FileText
 } from 'lucide-react';
 
-// --- Firebase Config (StackBlitz 用) ---
-const firebaseConfig = {
-  apiKey: "AIzaSyBWBUJ3D0ArkjYBcknRXE4d8n_nc_Jumq0",
-  authDomain: "castle-104.firebaseapp.com",
-  projectId: "castle-104",
-  storageBucket: "castle-104.firebasestorage.app",
-  messagingSenderId: "214626260016",
-  appId: "1:214626260016:web:8c7a036689295a074d09f5"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// --- Firebase Config (分離後) ---
+import { db } from "./firebase";
 const appId = 'castle-log-v7-stable';
 
 // 都道府県の並び順
