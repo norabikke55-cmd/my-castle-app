@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Config (分離後) ---
-import { db, auth } from "./firebase";   // ←★ これが必要！
+import { db, auth, appId } from "./firebase";   // ←★ これが必要！
 
 // 都道府県の並び順
 const PREF_ORDER = [
