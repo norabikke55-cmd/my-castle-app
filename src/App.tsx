@@ -86,7 +86,13 @@ export default function App() {
       qCol,
       (snap) => {
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setCastles(data);
+    
+        // 🔥 並べ替え（最新の訪問日が右に来る）
+        const sorted = data.sort((a, b) => {
+          return new Date(b.date).getTime() - new Date(a.date).getTime();
+        });
+    
+        setCastles(sorted);
         setLoading(false);
       },
       (err) => {
