@@ -63,19 +63,19 @@ export default function App() {
     visitDate: '', rating: 5, memo: ''
   });
   // --- Firebase Auth ---
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (err) {
-        console.error("Auth error:", err);
-      }
-    };
-    initAuth();
+useEffect(() => {
+  const unsubscribe = onAuthStateChanged(auth, async (u) => {
+    if (!u) {
+      // 🔥 ログインしていなければ必ず匿名ログイン
+      const result = await signInAnonymously(auth);
+      setUser(result.user);
+    } else {
+      setUser(u);
+    }
+  });
 
-    const unsubscribe = onAuthStateChanged(auth, u => setUser(u));
-    return () => unsubscribe();
-  }, []);
+  return () => unsubscribe();
+}, []);
 // --- Firestore 読み込み ---
 useEffect(() => {
   if (!user) return;
