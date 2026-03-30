@@ -271,16 +271,7 @@ useEffect(() => {
 
     reader.readAsArrayBuffer(file);
   };
-  return (
-  <>
-
-    {/* ここから元のアプリ本体 */}
-    <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
-      ・・・あなたのアプリ本体・・・
-    </div>
-  </>
-);
-    
+  
     <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
       {/* --- Header --- */}
       <header className="bg-white/95 border-b border-stone-200 sticky top-0 z-50 p-4 shadow-sm">
