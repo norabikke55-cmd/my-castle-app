@@ -758,4 +758,6 @@ useEffect(() => {
     </div>
   );
 }
-
+useEffect(() => {
+  console.log("USER UID:", user?.uid);
+}, [user]);
