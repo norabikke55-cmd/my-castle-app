@@ -272,6 +272,31 @@ useEffect(() => {
     reader.readAsArrayBuffer(file);
   };
   return (
+  <>
+    {/* 🔥 UID 表示コードはここに入れる */}
+    {user && (
+      <div style={{
+        position: "fixed",
+        bottom: 10,
+        left: 10,
+        background: "rgba(0,0,0,0.6)",
+        color: "white",
+        padding: "4px 8px",
+        borderRadius: "6px",
+        fontSize: "10px",
+        zIndex: 9999
+      }}>
+        UID: {user.uid}
+      </div>
+    )}
+
+    {/* ここから元のアプリ本体 */}
+    <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
+      ・・・あなたのアプリ本体・・・
+    </div>
+  </>
+);
+    
     <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
       {/* --- Header --- */}
       <header className="bg-white/95 border-b border-stone-200 sticky top-0 z-50 p-4 shadow-sm">
