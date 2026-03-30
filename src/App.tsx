@@ -273,22 +273,6 @@ useEffect(() => {
   };
   return (
   <>
-    {/* 🔥 UID 表示コードはここに入れる */}
-    {user && (
-      <div style={{
-        position: "fixed",
-        bottom: 10,
-        left: 10,
-        background: "rgba(0,0,0,0.6)",
-        color: "white",
-        padding: "4px 8px",
-        borderRadius: "6px",
-        fontSize: "10px",
-        zIndex: 9999
-      }}>
-        UID: {user.uid}
-      </div>
-    )}
 
     {/* ここから元のアプリ本体 */}
     <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
