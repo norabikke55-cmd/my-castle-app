@@ -76,33 +76,33 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, u => setUser(u));
     return () => unsubscribe();
   }, []);
-  // --- Firestore 読み込み ---
-  useEffect(() => {
-    if (!user) return;
-    setLoading(true);
+// --- Firestore 読み込み ---
+useEffect(() => {
+  if (!user) return;
+  setLoading(true);
 
-    const qCol = collection(db, 'artifacts', appId, 'users', user.uid, 'castles');
-    const unsubscribe = onSnapshot(
-      qCol,
-      (snap) => {
-        const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    
-        // 🔥 並べ替え（最新の訪問日が右に来る）
-        const sorted = data.sort((a, b) => {
-          return new Date(b.date).getTime() - new Date(a.date).getTime();
-        });
-    
-        setCastles(sorted);
-        setLoading(false);
-      },
-      (err) => {
-        console.error("Firestore error:", err);
-        setLoading(false);
-      }
-    );
+  const qCol = collection(db, 'artifacts', appId, 'users', user.uid, 'castles');
+  const unsubscribe = onSnapshot(
+    qCol,
+    (snap) => {
+      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    return () => unsubscribe();
-  }, [user]);
+      // 🔥 修正ポイント：visitDate を使う
+      const sorted = data.sort((a, b) => {
+        return new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime();
+      });
+
+      setCastles(sorted);
+      setLoading(false);
+    },
+    (err) => {
+      console.error("Firestore error:", err);
+      setLoading(false);
+    }
+  );
+
+  return () => unsubscribe();
+}, [user]);
 
   // --- 検索 & ソート ---
   const processedData = useMemo(() => {
