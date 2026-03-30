@@ -272,7 +272,8 @@ useEffect(() => {
     reader.readAsArrayBuffer(file);
   };
   
-    <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
+ return (
+  <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
       {/* --- Header --- */}
       <header className="bg-white/95 border-b border-stone-200 sticky top-0 z-50 p-4 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
