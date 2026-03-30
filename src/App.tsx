@@ -62,11 +62,10 @@ export default function App() {
     name: '', aka: '', pref: '', province: '', address: '',
     visitDate: '', rating: 5, memo: ''
   });
-  // --- Firebase Auth ---
+// --- Firebase Auth ---
 useEffect(() => {
   const unsubscribe = onAuthStateChanged(auth, async (u) => {
     if (!u) {
-      // 🔥 ログインしていなければ必ず匿名ログイン
       const result = await signInAnonymously(auth);
       setUser(result.user);
     } else {
@@ -76,6 +75,11 @@ useEffect(() => {
 
   return () => unsubscribe();
 }, []);
+
+// 🔥 UID を確認する useEffect（ここに置く）
+useEffect(() => {
+  console.log("USER UID:", user?.uid);
+}, [user]);
 // --- Firestore 読み込み ---
 useEffect(() => {
   if (!user) return;
@@ -758,6 +762,3 @@ useEffect(() => {
     </div>
   );
 }
-useEffect(() => {
-  console.log("USER UID:", user?.uid);
-}, [user]);
