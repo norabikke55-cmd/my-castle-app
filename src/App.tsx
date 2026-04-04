@@ -122,13 +122,16 @@ useEffect(() => {
     valA = Number(valA);
     valB = Number(valB);
 
-  } else if (sortConfig.key === "visitDate") {
+ } else if (sortConfig.key === "visitDate") {
   const toDate = (v) => {
     if (!v) return 0;
     if (v.toDate) return v.toDate().getTime(); // Timestamp → Date
     return new Date(v).getTime();              // 文字列 → Date
   };
 
+  valA = toDate(a.visitDate);
+  valB = toDate(b.visitDate);
+} 
   valA = toDate(a.visitDate);
   valB = toDate(b.visitDate);
 }
