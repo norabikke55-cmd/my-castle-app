@@ -140,37 +140,39 @@ useEffect(() => {
   }, [castles, searchTerm, sortConfig]);
 
   // --- 保存（新規 or 編集） ---
-  const handleSave = async (e) => {
-    e.preventDefault();
-   if (!formData.name) return;
+const handleSave = async (e) => {
+  e.preventDefault();
 
-    try {
-      const ref = editingId
-  ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
-  : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
-      await setDoc(ref, {
-        ...formData,
-        visitDate: (formData.visitDate || "").replace(/\//g, "-"),
-        updatedAt: new Date().toISOString(),
-      });
+  if (!formData.name) return;
 
-      setIsFormOpen(false);
-      setEditingId(null);
-      setFormData({
-        name: "",
-        aka: "",
-        pref: "",
-        province: "",
-        address: "",
-        visitDate: "",
-        rating: 5,
-        memo: "",
-      });
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  try {
+    const ref = editingId
+      ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
+      : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
 
+    await setDoc(ref, {
+      ...formData,
+      visitDate: (formData.visitDate || "").replace(/\//g, "-"),
+      updatedAt: new Date().toISOString(),
+    });
+
+    setIsFormOpen(false);
+    setEditingId(null);
+    setFormData({
+      name: "",
+      aka: "",
+      pref: "",
+      province: "",
+      address: "",
+      visitDate: "",
+      rating: 5,
+      memo: "",
+    });
+
+  } catch (err) {
+    console.error("Save error:", err);
+  }
+};
   // --- CSV インポート ---
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
