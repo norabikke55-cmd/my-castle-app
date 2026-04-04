@@ -64,7 +64,10 @@ export default function App() {
   });
 // --- Firebase Auth ---
 useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, async (u) => {
+  const unsubscribe = onAuthStateChanged(auth, u => {
+  setUser(u);
+  console.log("SMARTPHONE UID:", u?.uid);  // ← これだけ追加
+});
     if (!u) {
       const result = await signInAnonymously(auth);
       setUser(result.user);
