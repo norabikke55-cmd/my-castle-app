@@ -66,22 +66,29 @@ export default function App() {
 // --- Firebase Auth ---
 useEffect(() => {
   const initAuth = async () => {
-    const unsubscribe = onAuthStateChanged(auth, u => {
-      setUser(u);
-      console.log("SMARTPHONE UID:", u?.uid);  //
-    });
+    try {
+      // 匿名ログイン（未ログインの場合のみ）
+      if (!auth.currentUser) {
+        const result = await signInAnonymously(auth);
+        setUser(result.user);
+        console.log("SMARTPHONE UID:", result.user?.uid);
+      }
 
-    const currentUser = auth.currentUser;
-    if (!currentUser) {
-      const result = await signInAnonymously(auth);
-      setUser(result.user);
+      // ログイン状態の監視
+      const unsubscribe = onAuthStateChanged(auth, (u) => {
+        setUser(u);
+        console.log("SMARTPHONE UID:", u?.uid);
+      });
+
+      return unsubscribe;
+    } catch (err) {
+      console.error("Auth error:", err);
     }
-
-    return unsubscribe;
   };
 
   initAuth();
 }, []);
+
 // 🔥 UID を確認する useEffect（ここに置く）
 useEffect(() => {
   console.log("USER UID:", user?.uid);
