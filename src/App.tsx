@@ -123,8 +123,15 @@ useEffect(() => {
     valB = Number(valB);
 
   } else if (sortConfig.key === "visitDate") {
-    valA = new Date(a.visitDate).getTime();
-    valB = new Date(b.visitDate).getTime();
+  const toDate = (v) => {
+    if (!v) return 0;
+    if (v.toDate) return v.toDate().getTime(); // Timestamp → Date
+    return new Date(v).getTime();              // 文字列 → Date
+  };
+
+  valA = toDate(a.visitDate);
+  valB = toDate(b.visitDate);
+}
 
   } else if (sortConfig.key === "rating") {
     valA = a.rating || 0;
