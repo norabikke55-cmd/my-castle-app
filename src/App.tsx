@@ -150,9 +150,8 @@ useEffect(() => {
 
     try {
       const ref = editingId
-        ? doc(db, "artifacts", appId, "users", user.uid, "castles", editingId)
-        : doc(collection(db, "artifacts", appId, "users", user.uid, "castles"));
-
+  ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
+  : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
       await setDoc(ref, {
         ...formData,
         visitDate: (formData.visitDate || "").replace(/\//g, "-"),
@@ -231,8 +230,8 @@ useEffect(() => {
           if (!name) continue;
 
           const newRef = doc(
-            collection(db, "artifacts", appId, "users", user.uid, "castles")
-          );
+  collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles")
+);
 
           batch.set(newRef, {
             name,
@@ -484,16 +483,16 @@ useEffect(() => {
                       onClick={async () => {
                         if (window.confirm(`${castle.name}の記録を削除しますか？`)) {
                           await deleteDoc(
-                            doc(
-                              db,
-                              "artifacts",
-                              appId,
-                              "users",
-                              user.uid,
-                              "castles",
-                              castle.id
-                            )
-                            );
+  doc(
+    db,
+    "artifacts",
+    appId,
+    "users",
+    FIXED_USER_ID,
+    "castles",
+    castle.id
+  )
+);
                           }
                         }}
                         className="p-2.5 bg-stone-50 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all"
