@@ -123,8 +123,8 @@ useEffect(() => {
       } else if (sortConfig.key === "visitDate") {
         const normalize = (d) =>
           d ? d.toString().replace(/\//g, "-") : "0000-00-00";
-        valA = normalize(a.visitDate);
-        valB = normalize(b.visitDate);
+        valA = new Date(a.visitDate).getTime();
+　　　　 valB = new Date(b.visitDate).getTime();
       } else {
         valA = (a[sortConfig.key] || "").toString();
         valB = (b[sortConfig.key] || "").toString();
