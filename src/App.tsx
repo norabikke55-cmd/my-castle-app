@@ -131,10 +131,11 @@ useEffect(() => {
 
   valA = toDate(a.visitDate);
   valB = toDate(b.visitDate);
+
+} else if (sortConfig.key === "rating") {
+  valA = a.rating || 0;
+  valB = b.rating || 0;
 }
-  } else if (sortConfig.key === "rating") {
-    valA = a.rating || 0;
-    valB = b.rating || 0;
 
   } else {
     valA = (a[sortConfig.key] || "").toString();
