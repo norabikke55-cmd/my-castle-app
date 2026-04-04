@@ -608,10 +608,11 @@ const handleSave = async (e) => {
               </button>
             </div>
 
-            <form
-              onSubmit={handleSave}
-              className="p-6 md:p-8 space-y-6 overflow-y-auto"
-            >
+<div className="p-6 md:p-8 space-y-6 overflow-y-auto">
+  <form onSubmit={handleSave}>
+    ...
+  </form>
+</div>
               {/* Name */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
