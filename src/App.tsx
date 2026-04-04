@@ -4,9 +4,6 @@ import {
   getFirestore, collection, onSnapshot, doc, deleteDoc, setDoc, writeBatch 
 } from 'firebase/firestore';
 import { 
-  getAuth, signInAnonymously, onAuthStateChanged 
-} from 'firebase/auth';
-import { 
   Search, Calendar, Trash2, Plus, Star, X, Settings, 
   Edit3, MapPin, Download, FileUp, ExternalLink, 
   Loader2, Save, ArrowUp, ArrowDown, FileText
@@ -72,16 +69,22 @@ useEffect(() => {
 }, [user]);
 // --- Firestore 読み込み ---
 useEffect(() => {
-  if (!user) return;
   setLoading(true);
 
-  const qCol = collection(db, 'artifacts', appId, 'users', user.uid, 'castles');
+  const qCol = collection(
+    db,
+    'artifacts',
+    appId,
+    'users',
+    FIXED_USER_ID,
+    'castles'
+  );
+
   const unsubscribe = onSnapshot(
     qCol,
     (snap) => {
       const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-      // 🔥 修正ポイント：visitDate を使う
       const sorted = data.sort((a, b) => {
         return new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime();
       });
@@ -96,7 +99,7 @@ useEffect(() => {
   );
 
   return () => unsubscribe();
-}, [user]);
+}, []);
 
   // --- 検索 & ソート ---
   const processedData = useMemo(() => {
