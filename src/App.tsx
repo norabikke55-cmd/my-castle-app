@@ -15,6 +15,9 @@ import {
 // --- Firebase Config (分離後) ---
 import { db, auth, appId } from "./firebase";   // ←★ これが必要！
 
+// ★ ここに書く（赤丸の位置）
+const FIXED_USER_ID = "toshiyuki";
+
 // 都道府県の並び順
 const PREF_ORDER = [
   "北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県",
