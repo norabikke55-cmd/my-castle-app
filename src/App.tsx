@@ -62,23 +62,26 @@ export default function App() {
     name: '', aka: '', pref: '', province: '', address: '',
     visitDate: '', rating: 5, memo: ''
   });
+
 // --- Firebase Auth ---
 useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, u => {
-  setUser(u);
-  console.log("SMARTPHONE UID:", u?.uid);  // ← これだけ追加
-});
-    if (!u) {
+  const initAuth = async () => {
+    const unsubscribe = onAuthStateChanged(auth, u => {
+      setUser(u);
+      console.log("SMARTPHONE UID:", u?.uid);
+    });
+
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
       const result = await signInAnonymously(auth);
       setUser(result.user);
-    } else {
-      setUser(u);
     }
-  });
 
-  return () => unsubscribe();
+    return unsubscribe;
+  };
+
+  initAuth();
 }, []);
-
 // 🔥 UID を確認する useEffect（ここに置く）
 useEffect(() => {
   console.log("USER UID:", user?.uid);
