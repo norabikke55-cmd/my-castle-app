@@ -592,7 +592,7 @@ const handleSave = async (e) => {
           </div>
         </div>
       )}
-      {/* --- Form Modal --- */}
+{/* --- Form Modal --- */}
 {isFormOpen && (
   <div className="fixed inset-0 bg-stone-900/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-md">
     <div className="bg-white w-full max-w-xl rounded-t-[40px] md:rounded-[40px] shadow-2xl flex flex-col max-h-[94vh]">
@@ -755,7 +755,6 @@ const handleSave = async (e) => {
         </form>
       </div>
 
-     </div>
     </div>
   </div>
 )}
