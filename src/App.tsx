@@ -135,12 +135,11 @@ useEffect(() => {
 } else if (sortConfig.key === "rating") {
   valA = a.rating || 0;
   valB = b.rating || 0;
-}
 
-  } else {
-    valA = (a[sortConfig.key] || "").toString();
-    valB = (b[sortConfig.key] || "").toString();
-  }
+} else {
+  valA = (a[sortConfig.key] || "").toString();
+  valB = (b[sortConfig.key] || "").toString();
+}
 
   // ここには何も追加しない（重要）
 
