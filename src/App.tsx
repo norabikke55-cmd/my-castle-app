@@ -146,7 +146,7 @@ useEffect(() => {
   // --- 保存（新規 or 編集） ---
   const handleSave = async (e) => {
     e.preventDefault();
-    if (!user || !formData.name) return;
+   if (!formData.name) return;
 
     try {
       const ref = editingId
@@ -178,7 +178,7 @@ useEffect(() => {
   // --- CSV インポート ---
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
+    if (!file) return;
 
     setIsImporting(true);
 
