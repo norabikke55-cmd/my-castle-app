@@ -68,7 +68,7 @@ useEffect(() => {
   const initAuth = async () => {
     const unsubscribe = onAuthStateChanged(auth, u => {
       setUser(u);
-      console.log("SMARTPHONE UID:", u?.uid);
+      console.log("SMARTPHONE UID:", u?.uid);  //
     });
 
     const currentUser = auth.currentUser;
