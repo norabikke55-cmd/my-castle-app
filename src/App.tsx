@@ -113,34 +113,38 @@ useEffect(() => {
     );
 
     result.sort((a, b) => {
-      let valA, valB;
+  let valA, valB;
 
-      if (sortConfig.key === "pref") {
-        valA = PREF_ORDER.indexOf(a.pref);
-        valB = PREF_ORDER.indexOf(b.pref);
-        if (valA === -1) valA = 999;
-        if (valB === -1) valB = 999;
-      } else if (sortConfig.key === "visitDate") {
-        const normalize = (d) =>
-          d ? d.toString().replace(/\//g, "-") : "0000-00-00";
-        valA = new Date(a.visitDate).getTime();
-valB = new Date(b.visitDate).getTime();
-      } else {
+  if (sortConfig.key === "pref") {
+    valA = PREF_ORDER.indexOf(a.pref);
+    valB = PREF_ORDER.indexOf(b.pref);
+    if (valA === -1) valA = 999;
+    if (valB === -1) valB = 999;
+
+    // 数値比較に統一
+    valA = Number(valA);
+    valB = Number(valB);
+
+  } else if (sortConfig.key === "visitDate") {
+    valA = new Date(a.visitDate).getTime();
+    valB = new Date(b.visitDate).getTime();
+
+  } else if (sortConfig.key === "rating") {
+    valA = a.rating || 0;
+    valB = b.rating || 0;
+
+  } else {
     valA = (a[sortConfig.key] || "").toString();
     valB = (b[sortConfig.key] || "").toString();
-}
+  }
 
-// 型を揃える（数字なら数字、文字列なら文字列）
-if (!(typeof valA === "string" && typeof valB === "string")) {
-  valA = Number(valA);
-  valB = Number(valB);
-}
+  // ここには何も追加しない（重要）
 
-if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+  if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+  if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
 
-return (b.updatedAt || "").localeCompare(a.updatedAt || "");
-    });
+  return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+});
 
     return result;
   }, [castles, searchTerm, sortConfig]);
