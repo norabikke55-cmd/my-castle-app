@@ -124,7 +124,7 @@ useEffect(() => {
         const normalize = (d) =>
           d ? d.toString().replace(/\//g, "-") : "0000-00-00";
         valA = new Date(a.visitDate).getTime();
-　　　　 valB = new Date(b.visitDate).getTime();
+valB = new Date(b.visitDate).getTime();
       } else {
         valA = (a[sortConfig.key] || "").toString();
         valB = (b[sortConfig.key] || "").toString();
