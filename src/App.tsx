@@ -262,16 +262,17 @@ const handleSave = async (e) => {
     reader.readAsArrayBuffer(file);
   };
   
- return (
-  <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
-  
-    {/* --- Header --- */}
+  return (
+    <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
+      {/* --- Header --- */}
       <header className="bg-white/95 border-b border-stone-200 sticky top-0 z-50 p-4 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <CastleIcon />
             <div className="flex items-baseline gap-2">
-              <h1 className="text-xl font-black tracking-tighter text-stone-900">攻城記録</h1>
+              <h1 className="text-xl font-black tracking-tighter text-stone-900">
+                攻城記録
+              </h1>
               <span className="bg-stone-100 text-stone-600 px-2 py-0.5 rounded-md text-[10px] font-black border border-stone-200">
                 {castles.length} 城
               </span>
@@ -301,7 +302,8 @@ const handleSave = async (e) => {
                 setIsFormOpen(true);
               }}
               className="bg-stone-800 text-white px-5 py-2.5 rounded-full text-xs font-black flex items-center gap-1 shadow-md active:scale-95 transition-all"
-            >              <Plus size={18} /> 追加
+            >
+              <Plus size={18} /> 追加
             </button>
           </div>
         </div>
@@ -317,7 +319,7 @@ const handleSave = async (e) => {
               size={20}
             />
 
-<input
+            <input
               type="text"
               placeholder="城名、県名、旧国、住所、メモで検索..."
               className="w-full p-4 pl-12 bg-white border border-stone-200 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-stone-800/5 shadow-sm transition-all"
@@ -439,6 +441,7 @@ const handleSave = async (e) => {
                     </div>
                   )}
                 </div>
+
                 {/* Footer */}
                 <div className="flex justify-between items-center pt-5 border-t border-stone-50 mt-auto">
                   <div className="flex gap-1">
@@ -469,39 +472,43 @@ const handleSave = async (e) => {
 
                     <button
                       onClick={async () => {
-                        if (window.confirm(`${castle.name}の記録を削除しますか？`)) {
+                        if (
+                          window.confirm(`${castle.name}の記録を削除しますか？`)
+                        ) {
                           await deleteDoc(
-  doc(
-    db,
-    "artifacts",
-    appId,
-    "users",
-    FIXED_USER_ID,
-    "castles",
-    castle.id
-  )
-);
-                          }
-                        }}
-                        className="p-2.5 bg-stone-50 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                            doc(
+                              db,
+                              "artifacts",
+                              appId,
+                              "users",
+                              FIXED_USER_ID,
+                              "castles",
+                              castle.id
+                            )
+                          );
+                        }
+                      }}
+                      className="p-2.5 bg-stone-50 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all"
+                    >
+                      <Trash2 size={16} />
+                    </button>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </main>
-  
-        {/* --- Settings Modal --- */}
-        {showSettings && (
-          <div className="fixed inset-0 bg-stone-900/40 z-[110] flex items-center justify-center p-4 backdrop-blur-md">
-            <div className="bg-white w-full max-w-sm rounded-[48px] shadow-2xl p-12 text-center">
-              <h2 className="text-2xl font-black mb-10 text-stone-900">データ管理</h2>
-  
-              <div className="space-y-4">
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      {/* --- Settings Modal --- */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-stone-900/40 z-[110] flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-white w-full max-w-sm rounded-[48px] shadow-2xl p-12 text-center">
+            <h2 className="text-2xl font-black mb-10 text-stone-900">
+              データ管理
+            </h2>
+
+            <div className="space-y-4">
               {/* CSV Import */}
               <button
                 disabled={isImporting}
@@ -534,6 +541,7 @@ const handleSave = async (e) => {
                 onChange={handleFileUpload}
                 className="hidden"
               />
+
               {/* CSV Export */}
               <button
                 onClick={() => {
@@ -575,7 +583,7 @@ const handleSave = async (e) => {
                     <p className="text-stone-900">バックアップ保存</p>
                     <p className="text-[10px] text-stone-400 font-normal">
                       現在のデータをCSV出力
-                      </p>
+                    </p>
                   </div>
                 </div>
 
@@ -592,169 +600,173 @@ const handleSave = async (e) => {
           </div>
         </div>
       )}
-{/* --- Form Modal --- */}
-{isFormOpen && (
-  <div className="fixed inset-0 bg-stone-900/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-md">
-    <div className="bg-white w-full max-w-xl rounded-t-[40px] md:rounded-[40px] shadow-2xl flex flex-col max-h-[94vh]">
 
-      {/* Header */}
-      <div className="p-6 md:p-8 border-b border-stone-100 flex justify-between items-center">
-        <h2 className="text-xl font-black text-stone-900">
-          {editingId ? "記録を編集" : "新しい城郭を登録"}
-        </h2>
-        <button
-          type="button"
-          onClick={() => setIsFormOpen(false)}
-          className="p-2 text-stone-300 hover:text-stone-800 transition-colors bg-stone-50 rounded-full"
-        >
-          <X size={24} />
-        </button>
-      </div>
-
-      {/* Form Body */}
-      <div className="p-6 md:p-8 space-y-6 overflow-y-auto">
-        <form onSubmit={handleSave} className="space-y-6">
-
-          {/* Name */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-              城郭名
-            </label>
-            <input
-              required
-              placeholder="例: 姫路城"
-              className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent font-black text-stone-900 outline-none focus:bg-white focus:border-stone-200 transition-colors"
-              value={formData.name}
-              onChange={(e) =>
-                setFormData({ ...formData, name: e.target.value })
-              }
-            />
-          </div>
-
-          {/* Aka & Province */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-                別名
-              </label>
-              <input
-                placeholder="例: 白鷺城"
-                className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-                value={formData.aka}
-                onChange={(e) =>
-                  setFormData({ ...formData, aka: e.target.value })
-                }
-              />
+      {/* --- Form Modal --- */}
+      {isFormOpen && (
+        <div className="fixed inset-0 bg-stone-900/60 z-[100] flex items-end md:items-center justify-center p-0 md:p-4 backdrop-blur-md">
+          <div className="bg-white w-full max-w-xl rounded-t-[40px] md:rounded-[40px] shadow-2xl flex flex-col max-h-[94vh]">
+            {/* Header */}
+            <div className="p-6 md:p-8 border-b border-stone-100 flex justify-between items-center">
+              <h2 className="text-xl font-black text-stone-900">
+                {editingId ? "記録を編集" : "新しい城郭を登録"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(false)}
+                className="p-2 text-stone-300 hover:text-stone-800 transition-colors bg-stone-50 rounded-full"
+              >
+                <X size={24} />
+              </button>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-                旧国名
-              </label>
-              <input
-                placeholder="例: 播磨"
-                className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-                value={formData.province}
-                onChange={(e) =>
-                  setFormData({ ...formData, province: e.target.value })
-                }
-              />
-            </div>
-          </div>
+            {/* Form Body */}
+            <div className="p-6 md:p-8 space-y-6 overflow-y-auto">
+              <form onSubmit={handleSave} className="space-y-6">
+                {/* Name */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
+                    城郭名
+                  </label>
+                  <input
+                    required
+                    placeholder="例: 姫路城"
+                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent font-black text-stone-900 outline-none focus:bg-white focus:border-stone-200 transition-colors"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                  />
+                </div>
 
-          {/* Pref & Date */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-                都道府県
-              </label>
-              <input
-                placeholder="例: 兵庫県"
-                className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-                value={formData.pref}
-                onChange={(e) =>
-                  setFormData({ ...formData, pref: e.target.value })
-                }
-              />
-            </div>
+                {/* Aka & Province */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
+                      別名
+                    </label>
+                    <input
+                      placeholder="例: 白鷺城"
+                      className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                      value={formData.aka}
+                      onChange={(e) =>
+                        setFormData({ ...formData, aka: e.target.value })
+                      }
+                    />
+                  </div>
 
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-                訪問日
-              </label>
-              <input
-                placeholder="例: 2024/04/01"
-                className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-                value={formData.visitDate}
-                onChange={(e) =>
-                  setFormData({ ...formData, visitDate: e.target.value })
-                }
-              />
-            </div>
-          </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
+                      旧国名
+                    </label>
+                    <input
+                      placeholder="例: 播磨"
+                      className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                      value={formData.province}
+                      onChange={(e) =>
+                        setFormData({ ...formData, province: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
 
-          {/* Address */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-              所在地
-            </label>
-            <input
-              placeholder="住所を入力"
-              className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-              value={formData.address}
-              onChange={(e) =>
-                setFormData({ ...formData, address: e.target.value })
-              }
-            />
-          </div>
+                {/* Pref & Date */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
+                      都道府県
+                    </label>
+                    <input
+                      placeholder="例: 兵庫県"
+                      className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                      value={formData.pref}
+                      onChange={(e) =>
+                        setFormData({ ...formData, pref: e.target.value })
+                      }
+                    />
+                  </div>
 
-          {/* Memo */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-              メモ・備考
-            </label>
-            <textarea
-              placeholder="造構の状態や、アクセス時の注意点など…"
-              className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-              value={formData.memo}
-              onChange={(e) =>
-                setFormData({ ...formData, memo: e.target.value })
-              }
-            />
-          </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
+                      訪問日
+                    </label>
+                    <input
+                      placeholder="例: 2024/04/01"
+                      className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                      value={formData.visitDate}
+                      onChange={(e) =>
+                        setFormData({ ...formData, visitDate: e.target.value })
+                      }
+                    />
+                  </div>
+                </div>
 
-          {/* Rating */}
-          <div className="space-y-2 text-center">
-            <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">
-              満足度
-            </label>
-            <div className="flex justify-center gap-2">
-              {[1, 2, 3, 4, 5].map((n) => (
+                {/* Address */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
+                    所在地
+                  </label>
+                  <input
+                    placeholder="住所を入力"
+                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                    value={formData.address}
+                    onChange={(e) =>
+                      setFormData({ ...formData, address: e.target.value })
+                    }
+                  />
+                </div>
+
+                {/* Memo */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
+                    メモ・備考
+                  </label>
+                  <textarea
+                    placeholder="造構の状態や、アクセス時の注意点など…"
+                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                    value={formData.memo}
+                    onChange={(e) =>
+                      setFormData({ ...formData, memo: e.target.value })
+                    }
+                  />
+                </div>
+
+                {/* Rating */}
+                <div className="space-y-2 text-center">
+                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em]">
+                    満足度
+                  </label>
+                  <div className="flex justify-center gap-2">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() =>
+                          setFormData({ ...formData, rating: n })
+                        }
+                        className={`text-2xl ${
+                          formData.rating >= n
+                            ? "text-yellow-400"
+                            : "text-stone-300"
+                        }`}
+                      >
+                        ★
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Save Button */}
                 <button
-                  key={n}
-                  type="button"
-                  onClick={() => setFormData({ ...formData, rating: n })}
-                  className={`text-2xl ${
-                    formData.rating >= n ? "text-yellow-400" : "text-stone-300"
-                  }`}
+                  type="submit"
+                  className="w-full bg-stone-900 text-white py-5 rounded-[24px] font-black shadow-xl hover:bg-stone-800 transition-all"
                 >
-                  ★
+                  記録を保存
                 </button>
-              ))}
+              </form>
             </div>
           </div>
-
-          {/* Save Button */}
-          <button
-            type="submit"
-            className="w-full bg-stone-900 text-white py-5 rounded-[24px] font-black shadow-xl hover:bg-stone-800 transition-all"
-          >
-            記録を保存
-          </button>
-
-        </form>
-      </div>
-
+        </div>
+      )}
     </div>
-  </div>
-)}
+  );
+}
