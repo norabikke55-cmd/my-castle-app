@@ -609,55 +609,45 @@ const handleSave = async (e) => {
             </div>
 
 <div className="p-6 md:p-8 space-y-6 overflow-y-auto">
-  <form onSubmit={handleSave}>
-    ...
+  <form onSubmit={handleSave} className="space-y-6">
+
+    {/* Name */}
+    <div className="space-y-2">
+      <label>城郭名</label>
+      <input ... />
+    </div>
+
+    {/* Aka & Province */}
+    <div className="grid grid-cols-2 gap-4">
+      ...
+    </div>
+
+    {/* Pref & Date */}
+    <div className="grid grid-cols-2 gap-4">
+      ...
+    </div>
+
+    {/* Address */}
+    <div className="space-y-2">
+      ...
+    </div>
+
+    {/* Memo */}
+    <div className="space-y-2">
+      ...
+    </div>
+
+    {/* Rating */}
+    <div className="space-y-2 text-center">
+      ...
+    </div>
+
+    {/* Save Button */}
+    <button type="submit">記録を保存</button>
+
   </form>
 </div>
-              {/* Name */}
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-                  城郭名
-                </label>
-                <input
-                  required
-                  placeholder="例: 姫路城"
-                  className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent font-black text-stone-900 outline-none focus:bg-white focus:border-stone-200 transition-all"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                />
-              </div>
 
-              {/* Aka & Province */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-                    別名
-                  </label>
-                  <input
-                    placeholder="例: 白鷺城"
-                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-all"
-                    value={formData.aka}
-                    onChange={(e) =>
-                      setFormData({ ...formData, aka: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
-                    旧国名
-                  </label>
-                  <input
-                    placeholder="例: 播磨"
-                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-all"
-                    value={formData.province}
-                    onChange={(e) =>
-                      setFormData({ ...formData, province: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
               {/* Pref & Date */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
