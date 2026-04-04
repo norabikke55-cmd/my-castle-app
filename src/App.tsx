@@ -126,14 +126,20 @@ useEffect(() => {
         valA = new Date(a.visitDate).getTime();
 valB = new Date(b.visitDate).getTime();
       } else {
-        valA = (a[sortConfig.key] || "").toString();
-        valB = (b[sortConfig.key] || "").toString();
-      }
+    valA = (a[sortConfig.key] || "").toString();
+    valB = (b[sortConfig.key] || "").toString();
+}
 
-      if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-      if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+// 型を揃える（数字なら数字、文字列なら文字列）
+if (!(typeof valA === "string" && typeof valB === "string")) {
+  valA = Number(valA);
+  valB = Number(valB);
+}
 
-      return (b.updatedAt || "").localeCompare(a.updatedAt || "");
+if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+
+return (b.updatedAt || "").localeCompare(a.updatedAt || "");
     });
 
     return result;
