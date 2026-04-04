@@ -77,23 +77,20 @@ useEffect(() => {
   );
 
   const unsubscribe = onSnapshot(
-    qCol,
-    (snap) => {
-      const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  qCol,
+  (snap) => {
+    const data = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-      const sorted = data.sort((a, b) => {
-        return new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime();
-      });
+    // Firestore 読み込み時はソートしない（重要）
+    setCastles(data);
 
-      setCastles(sorted);
-      setLoading(false);
-    },
-    (err) => {
-      console.error("Firestore error:", err);
-      setLoading(false);
-    }
-  );
-
+    setLoading(false);
+  },
+  (err) => {
+    console.error("Firestore error:", err);
+    setLoading(false);
+  }
+);
   return () => unsubscribe();
 }, []);
 
