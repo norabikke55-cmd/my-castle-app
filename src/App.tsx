@@ -287,7 +287,18 @@ useEffect(() => {
   
  return (
   <div className="min-h-screen bg-[#FDFCFB] text-stone-800 font-sans pb-24">
-      {/* --- Header --- */}
+  <div style={{
+  position: "fixed",
+  top: 10,
+  left: 10,
+  background: "rgba(255,255,255,0.8)",
+  padding: "4px 6px",
+  fontSize: "10px",
+  zIndex: 9999
+}}>
+  UID: {user?.uid}
+</div>
+    {/* --- Header --- */}
       <header className="bg-white/95 border-b border-stone-200 sticky top-0 z-50 p-4 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
