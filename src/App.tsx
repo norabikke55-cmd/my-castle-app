@@ -99,6 +99,9 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
     return result;
   }, [castles]);
 
+  const visitedPrefs = new Set(castles.map((c) => c.pref).filter(Boolean));
+  const unvisitedPrefs = PREF_ORDER.filter((p) => !visitedPrefs.has(p));
+
   return (
     <div className="max-w-2xl mx-auto p-4 md:p-6 pb-28">
       {/* サマリーバナー */}
@@ -142,6 +145,23 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
           </div>
         ))}
       </div>
+
+      {/* 未訪問都道府県 */}
+      {unvisitedPrefs.length > 0 && (
+        <div className="mt-6">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest">未訪問</span>
+            <span className="text-[10px] font-black text-stone-300">{unvisitedPrefs.length} 県</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {unvisitedPrefs.map((pref) => (
+              <span key={pref} className="text-[11px] font-bold text-stone-300 bg-stone-50 border border-stone-100 px-3 py-1 rounded-full">
+                {pref}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -260,9 +280,27 @@ const MapPage = ({ castles }: { castles: any[] }) => {
       )}
       <div ref={mapRef} className="w-full h-full" />
       {mapReady && (
-        <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 z-[1000]">
-          <span className="text-[11px] font-black text-stone-600">🏯 {validCount} 城表示中</span>
-        </div>
+        <>
+          {/* 城数バッジ */}
+          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 z-[1000]">
+            <span className="text-[11px] font-black text-stone-600">🏯 {validCount} 城表示中</span>
+          </div>
+          {/* 凡例 */}
+          <div className="absolute bottom-6 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[1000]">
+            <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1.5">評価</p>
+            {[
+              { color: "#B7410E", label: "★★★★★" },
+              { color: "#C06030", label: "★★★★" },
+              { color: "#7c6a56", label: "★★★" },
+              { color: "#9ca3af", label: "★★以下" },
+            ].map(({ color, label }) => (
+              <div key={label} className="flex items-center gap-2 mb-1 last:mb-0">
+                <div style={{ background: color }} className="w-3.5 h-3.5 rounded-full border border-white shadow-sm shrink-0" />
+                <span className="text-[10px] font-bold text-stone-600">{label}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
