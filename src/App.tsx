@@ -676,7 +676,7 @@ export default function App() {
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">訪問日</label>
-                    <input placeholder="例: 2024-04-01" className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors" value={formData.visitDate} onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })} />
+                    <input type="date" className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors" value={formData.visitDate} onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })} />
                   </div>
                 </div>
 
