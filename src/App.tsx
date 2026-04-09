@@ -124,7 +124,7 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
         {grouped.map(({ pref, items }) => (
           <div key={pref} className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
             <div className="px-5 py-3 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
-              <h3 className="font-black text-sm text-stone-800">{pref}</h3>
+              <h3 className="font-black text-sm text-stone-400">{pref}</h3>
               <span className="text-[10px] font-black text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200">
                 {items.length} 城
               </span>
@@ -133,7 +133,7 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
               {[...items]
                 .sort((a, b) => (b.rating || 5) - (a.rating || 5))
                 .map((castle) => (
-                  <div key={castle.id} className="px-5 py-2 flex items-center justify-between gap-3">
+                  <div key={castle.id} className="pl-10 pr-5 py-2 flex items-center justify-between gap-3">
                     <span className="text-sm font-bold text-stone-800 truncate">{castle.name}</span>
                     <Stars rating={castle.rating || 5} size={11} />
                   </div>
@@ -513,25 +513,25 @@ export default function App() {
                       {castle.aka ? `別名: ${castle.aka}` : ""}
                     </p>
 
-                    {/* 詳細情報 */}
+                    {/* 詳細情報（空欄でも行を維持し、レイアウトを統一） */}
                     <div className="space-y-1.5 text-[12px] text-stone-500">
-                      {castle.visitDate && (
-                        <div className="flex items-center gap-2 font-bold text-stone-700">
-                          <Calendar size={12} className="text-amber-400 shrink-0" />
-                          {castle.visitDate}
-                        </div>
-                      )}
-                      {castle.address && (
-                        <div className="flex items-start gap-2">
-                          <MapPin size={12} className="text-stone-300 mt-0.5 shrink-0" />
-                          <span className="line-clamp-1">{castle.address}</span>
-                        </div>
-                      )}
-                      {castle.memo && (
-                        <div className="mt-2 p-2.5 bg-amber-50/60 rounded-xl text-stone-600 line-clamp-2 italic text-[11px] border border-amber-100">
-                          {castle.memo}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2 font-bold text-stone-700 h-[18px]">
+                        <Calendar size={12} className="text-amber-400 shrink-0" />
+                        <span>{castle.visitDate || ""}</span>
+                      </div>
+                      <div className="flex items-start gap-2 h-[18px]">
+                        <MapPin size={12} className="text-stone-300 mt-0.5 shrink-0" />
+                        <span className="line-clamp-1">{castle.address || ""}</span>
+                      </div>
+                      <div className="h-[44px] mt-1">
+                        {castle.memo ? (
+                          <div className="p-2.5 bg-amber-50/60 rounded-xl text-stone-600 line-clamp-2 italic text-[11px] border border-amber-100 h-full">
+                            {castle.memo}
+                          </div>
+                        ) : (
+                          <div className="h-full" />
+                        )}
+                      </div>
                     </div>
 
                     {/* 編集・削除ボタン（右寄せ・コンパクト） */}
