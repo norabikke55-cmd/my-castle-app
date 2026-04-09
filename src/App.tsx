@@ -103,7 +103,7 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
   const unvisitedPrefs = PREF_ORDER.filter((p) => !visitedPrefs.has(p));
 
   return (
-    <div className="max-w-2xl mx-auto p-4 md:p-6 pb-40">
+    <div className="max-w-2xl mx-auto p-4 md:p-6" style={{ paddingBottom: "160px" }}>
       {/* サマリーバナー */}
       <div className="mb-6 p-5 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border border-amber-100 flex items-center justify-between">
         <div>
