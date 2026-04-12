@@ -560,7 +560,7 @@ export default function App() {
                   <div key={castle.id}
                     className="bg-white border border-stone-200 rounded-[28px] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
 
-                    {/* 都道府県・旧国タグ + 写真サムネイル */}
+                    {/* 都道府県・旧国タグ + 大きい写真サムネイル */}
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <div className="flex flex-wrap gap-1.5">
                         <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
@@ -572,25 +572,26 @@ export default function App() {
                           </span>
                         )}
                       </div>
-                      {/* 写真サムネイル（角丸四角） */}
                       {castle.photo && (
                         <button onClick={() => setZoomedPhoto(castle.photo)}
-                          className="shrink-0 w-12 h-12 rounded-lg overflow-hidden border border-stone-200 shadow-sm hover:shadow-md hover:scale-105 transition-all">
+                          className="shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-stone-200 shadow-sm hover:shadow-md hover:scale-105 transition-all">
                           <img src={castle.photo} alt={castle.name} className="w-full h-full object-cover" />
                         </button>
                       )}
                     </div>
 
-                    {/* 城名 + 評価 */}
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="text-lg font-black text-stone-900 leading-tight flex items-center gap-1.5 min-w-0">
-                        <span className="truncate">{castle.name}</span>
+                    {/* 城名（7文字分固定幅）＋ 評価 */}
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="flex items-center gap-1.5 shrink-0 w-36 min-w-0">
+                        <h3 className="text-lg font-black text-stone-900 leading-tight truncate">
+                          {castle.name}
+                        </h3>
                         <a href={`https://ja.wikipedia.org/wiki/${encodeURIComponent(castle.name)}`}
                           target="_blank" rel="noopener noreferrer"
                           className="text-stone-200 hover:text-stone-600 transition-colors shrink-0">
                           <ExternalLink size={13} />
                         </a>
-                      </h3>
+                      </div>
                       <Stars rating={castle.rating || 5} size={12} />
                     </div>
 
