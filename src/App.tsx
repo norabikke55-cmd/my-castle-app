@@ -166,79 +166,70 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
   );
 };
 
-// ─── マップページ（Leaflet） ─────────────────────────────
+// ─── マップページ（Google Maps） ───────────────────────
+// ★ Google Maps APIキーをここに設定してください
+const GOOGLE_MAPS_API_KEY = "YOUR_API_KEY_HERE";
 
 const MapPage = ({ castles }: { castles: any[] }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const infoWindowRef = useRef<any>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [noKey, setNoKey] = useState(false);
 
-  // マップ初期化（1回のみ）
+  const markerColor = (rating: number) =>
+    rating >= 5 ? "#B7410E" : rating >= 4 ? "#C06030" : rating >= 3 ? "#7c6a56" : "#9ca3af";
+
+  // マップ初期化
   useEffect(() => {
-    if (!document.getElementById("leaflet-css")) {
-      const link = document.createElement("link");
-      link.id = "leaflet-css";
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(link);
-    }
+    if (GOOGLE_MAPS_API_KEY === "YOUR_API_KEY_HERE") { setNoKey(true); return; }
 
-    const init = () => {
-      const L = (window as any).L;
-      if (!mapRef.current || mapInstanceRef.current || !L) return;
-
-      const map = L.map(mapRef.current, { zoomControl: true }).setView([36.5, 137.5], 5);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 18,
-      }).addTo(map);
-
+    const initMap = () => {
+      if (!mapRef.current || mapInstanceRef.current) return;
+      const google = (window as any).google;
+      const map = new google.maps.Map(mapRef.current, {
+        center: { lat: 36.5, lng: 137.0 },
+        zoom: 6,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+      });
       mapInstanceRef.current = map;
+      infoWindowRef.current = new google.maps.InfoWindow();
       setMapReady(true);
     };
 
-    if ((window as any).L) {
-      init();
-    } else {
+    const scriptId = "google-maps-script";
+    if ((window as any).google?.maps) {
+      initMap();
+    } else if (!document.getElementById(scriptId)) {
       const script = document.createElement("script");
-      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.onload = init;
+      script.id = scriptId;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&language=ja`;
+      script.async = true;
+      script.onload = initMap;
       document.head.appendChild(script);
+    } else {
+      // スクリプト読み込み中の場合はロード完了を待つ
+      const existing = document.getElementById(scriptId) as HTMLScriptElement;
+      existing.addEventListener("load", initMap);
     }
 
     return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
+      markersRef.current.forEach((m) => m.setMap(null));
+      markersRef.current = [];
+      mapInstanceRef.current = null;
     };
   }, []);
 
-  // マーカー更新（城データ変更時）
+  // マーカー更新
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
-    const L = (window as any).L;
+    const google = (window as any).google;
 
-    // 既存マーカー削除
-    markersRef.current.forEach((m) => m.remove());
+    markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
-
-    // マーカーアイコン生成
-    const makeIcon = (rating: number) => {
-      const color = rating >= 5 ? "#B7410E" : rating >= 4 ? "#C06030" : rating >= 3 ? "#7c6a56" : "#9ca3af";
-      return L.divIcon({
-        html: `<div style="
-          background:${color};color:white;width:30px;height:30px;
-          border-radius:50%;display:flex;align-items:center;justify-content:center;
-          font-size:15px;border:2px solid white;
-          box-shadow:0 2px 6px rgba(0,0,0,0.35);cursor:pointer;">🏯</div>`,
-        className: "",
-        iconSize: [30, 30],
-        iconAnchor: [15, 15],
-        popupAnchor: [0, -18],
-      });
-    };
 
     castles.forEach((castle) => {
       const coords = PREF_COORDS[castle.pref];
@@ -247,22 +238,41 @@ const MapPage = ({ castles }: { castles: any[] }) => {
       const h = stableHash(castle.id || castle.name);
       const lat = coords[0] + (((h & 0xff) - 128) / 128) * 0.22;
       const lng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
+      const color = markerColor(castle.rating || 5);
 
-      const starsHtml = [1, 2, 3, 4, 5]
-        .map((n) => `<span style="color:${n <= (castle.rating || 5) ? "#F59E0B" : "#e5e7eb"};font-size:13px">★</span>`)
-        .join("");
+      const svgMarker = {
+        path: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z",
+        fillColor: color,
+        fillOpacity: 1,
+        strokeColor: "#fff",
+        strokeWeight: 1.5,
+        scale: 1.6,
+        anchor: new google.maps.Point(12, 22),
+      };
 
-      const marker = L.marker([lat, lng], { icon: makeIcon(castle.rating || 5) })
-        .addTo(mapInstanceRef.current)
-        .bindPopup(`
-          <div style="font-family:sans-serif;min-width:140px;padding:2px">
-            <div style="font-weight:900;font-size:14px;margin-bottom:3px;color:#1c1917">${castle.name}</div>
-            ${castle.province ? `<div style="font-size:10px;color:#92400e;margin-bottom:2px;font-weight:700">${castle.province}国</div>` : ""}
-            ${castle.pref ? `<div style="font-size:10px;color:#78716c;margin-bottom:4px">${castle.pref}</div>` : ""}
+      const starsHtml = [1,2,3,4,5].map((n) =>
+        `<span style="color:${n <= (castle.rating||5) ? "#F59E0B" : "#e5e7eb"};font-size:14px">★</span>`
+      ).join("");
+
+      const marker = new google.maps.Marker({
+        position: { lat, lng },
+        map: mapInstanceRef.current,
+        icon: svgMarker,
+        title: castle.name,
+      });
+
+      marker.addListener("click", () => {
+        infoWindowRef.current.setContent(`
+          <div style="font-family:sans-serif;min-width:150px;padding:4px 2px">
+            <div style="font-weight:900;font-size:14px;margin-bottom:4px;color:#1c1917">${castle.name}</div>
+            ${castle.province ? `<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:2px">${castle.province}国</div>` : ""}
+            ${castle.pref ? `<div style="font-size:11px;color:#78716c;margin-bottom:4px">${castle.pref}</div>` : ""}
             ${castle.visitDate ? `<div style="font-size:11px;color:#666;margin-bottom:4px">📅 ${castle.visitDate}</div>` : ""}
             <div>${starsHtml}</div>
           </div>
         `);
+        infoWindowRef.current.open(mapInstanceRef.current, marker);
+      });
 
       markersRef.current.push(marker);
     });
@@ -270,8 +280,17 @@ const MapPage = ({ castles }: { castles: any[] }) => {
 
   const validCount = castles.filter((c) => PREF_COORDS[c.pref]).length;
 
+  if (noKey) return (
+    <div className="flex flex-col items-center justify-center text-center px-8" style={{ height: "calc(100vh - 132px)" }}>
+      <div className="text-4xl mb-4">🗺️</div>
+      <p className="font-black text-stone-700 mb-2">Google Maps APIキーが必要です</p>
+      <p className="text-sm text-stone-400 mb-4">App.tsx の <code className="bg-stone-100 px-1 rounded">GOOGLE_MAPS_API_KEY</code> にキーを設定してください。</p>
+      <a href="https://developers.google.com/maps/documentation/javascript/get-api-key" target="_blank" rel="noopener noreferrer" className="text-[11px] text-amber-700 underline">APIキーの取得方法 →</a>
+    </div>
+  );
+
   return (
-    <div className="relative" style={{ height: "calc(100vh - 112px)" }}>
+    <div className="relative" style={{ height: "calc(100vh - 132px)" }}>
       {!mapReady && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-stone-50 z-10">
           <Loader2 className="animate-spin text-stone-300 mb-3" size={32} />
@@ -281,12 +300,10 @@ const MapPage = ({ castles }: { castles: any[] }) => {
       <div ref={mapRef} className="w-full h-full" />
       {mapReady && (
         <>
-          {/* 城数バッジ */}
-          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 z-[1000]">
+          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 z-10">
             <span className="text-[11px] font-black text-stone-600">🏯 {validCount} 城表示中</span>
           </div>
-          {/* 凡例 */}
-          <div className="absolute bottom-6 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[1000]">
+          <div className="absolute bottom-4 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-10">
             <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1.5">評価</p>
             {[
               { color: "#B7410E", label: "★★★★★" },
@@ -444,9 +461,11 @@ export default function App() {
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={() => setShowSettings(true)} className="p-2 text-stone-400 hover:text-stone-800 transition-colors">
-              <Settings size={22} />
-            </button>
+            {currentPage === "list" && (
+              <button onClick={() => setShowSettings(true)} className="p-2 text-stone-400 hover:text-stone-800 transition-colors">
+                <Settings size={22} />
+              </button>
+            )}
             {currentPage === "list" && (
               <button
                 onClick={() => { setEditingId(null); setFormData({ name: "", aka: "", pref: "", province: "", address: "", visitDate: "", rating: 5, memo: "" }); setIsFormOpen(true); }}
@@ -606,7 +625,7 @@ export default function App() {
       </main>
 
       {/* ── ボトムナビゲーション ── */}
-      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 border-t border-stone-200 z-50 backdrop-blur-sm">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white/95 border-t border-stone-200 z-[2000] backdrop-blur-sm">
         <div className="max-w-5xl mx-auto flex">
           {[
             { page: "list" as PageType, label: "訪問記録", Icon: LayoutList },
