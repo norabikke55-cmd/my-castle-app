@@ -560,19 +560,38 @@ export default function App() {
                   <div key={castle.id}
                     className="bg-white border border-stone-200 rounded-[28px] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
 
-                    {/* 都道府県・旧国タグ + 写真（常に80x80スペース確保） */}
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
-                          {castle.pref || "未設定"}
-                        </span>
-                        {castle.province && (
-                          <span className="text-[10px] font-black text-stone-600 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-full">
-                            {castle.province}
+                    {/* 2カラムレイアウト：左＝タグ・★・城名、右＝写真 */}
+                    <div className="flex gap-3 mb-1">
+                      {/* 左カラム */}
+                      <div className="flex-1 min-w-0">
+                        {/* 都道府県・旧国タグ */}
+                        <div className="flex flex-wrap gap-1.5 mb-1.5">
+                          <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                            {castle.pref || "未設定"}
                           </span>
-                        )}
+                          {castle.province && (
+                            <span className="text-[10px] font-black text-stone-600 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-full">
+                              {castle.province}
+                            </span>
+                          )}
+                        </div>
+                        {/* 評価 */}
+                        <div className="mb-1">
+                          <Stars rating={castle.rating || 5} size={12} />
+                        </div>
+                        {/* 城名 */}
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="text-lg font-black text-stone-900 leading-tight truncate">
+                            {castle.name}
+                          </h3>
+                          <a href={`https://ja.wikipedia.org/wiki/${encodeURIComponent(castle.name)}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-stone-200 hover:text-stone-600 transition-colors shrink-0">
+                            <ExternalLink size={13} />
+                          </a>
+                        </div>
                       </div>
-                      {/* 写真があれば表示、なければ同サイズの透明スペース */}
+                      {/* 右カラム：写真（常に固定サイズで確保） */}
                       <div className="shrink-0 w-20 h-20">
                         {castle.photo ? (
                           <button onClick={() => setZoomedPhoto(castle.photo)}
@@ -581,23 +600,6 @@ export default function App() {
                           </button>
                         ) : null}
                       </div>
-                    </div>
-
-                    {/* 評価（城名の上） */}
-                    <div className="mb-1">
-                      <Stars rating={castle.rating || 5} size={12} />
-                    </div>
-
-                    {/* 城名 */}
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <h3 className="text-lg font-black text-stone-900 leading-tight truncate">
-                        {castle.name}
-                      </h3>
-                      <a href={`https://ja.wikipedia.org/wiki/${encodeURIComponent(castle.name)}`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="text-stone-200 hover:text-stone-600 transition-colors shrink-0">
-                        <ExternalLink size={13} />
-                      </a>
                     </div>
 
                     {/* 別名（固定行） */}
