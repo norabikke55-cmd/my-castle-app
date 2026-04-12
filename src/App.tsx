@@ -54,20 +54,23 @@ const MAX_BYTES = 50 * 1024; // 50KB
 
 const compressImage = (file: File, maxSide: number, quality: number): Promise<string> =>
   new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const canvas = document.createElement("canvas");
-      canvas.width = w; canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL("image/jpeg", quality));
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = reject;
+      img.src = e.target!.result as string;
     };
-    img.onerror = reject;
-    img.src = url;
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
 
 const processPhoto = async (file: File): Promise<{ data: string; error?: string }> => {
@@ -297,7 +300,7 @@ const MapPage = ({ castles }: { castles: any[] }) => {
           <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 z-[1000]">
             <span className="text-[11px] font-black text-stone-600">🏯 {validCount} 城表示中</span>
           </div>
-          <div className="absolute bottom-4 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[1000]">
+          <div className="absolute bottom-16 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[1000]">
             <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1.5">評価</p>
             {[
               { color: "#B7410E", label: "★★★★★" },
@@ -729,26 +732,26 @@ export default function App() {
                 <X size={24} />
               </button>
             </div>
-            <div className="p-6 md:p-8 overflow-y-auto">
+            <div className="p-6 md:p-8 overflow-y-auto" style={{ paddingBottom: "80px" }}>
               <form onSubmit={handleSave} className="space-y-5">
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">城郭名</label>
-                  <input required placeholder="例: 姫路城"
+                  <label htmlFor="f-name" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">城郭名</label>
+                  <input id="f-name" name="name" required placeholder="例: 姫路城"
                     className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent font-black text-stone-900 outline-none focus:bg-white focus:border-stone-200 transition-colors"
                     value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">別名</label>
-                    <input placeholder="例: 白鷺城"
+                    <label htmlFor="f-aka" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">別名</label>
+                    <input id="f-aka" name="aka" placeholder="例: 白鷺城"
                       className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                       value={formData.aka} onChange={(e) => setFormData({ ...formData, aka: e.target.value })} />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">旧国名</label>
-                    <input placeholder="例: 播磨"
+                    <label htmlFor="f-province" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">旧国名</label>
+                    <input id="f-province" name="province" placeholder="例: 播磨"
                       className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                       value={formData.province} onChange={(e) => setFormData({ ...formData, province: e.target.value })} />
                   </div>
@@ -756,29 +759,29 @@ export default function App() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">都道府県</label>
-                    <input placeholder="例: 兵庫県"
+                    <label htmlFor="f-pref" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">都道府県</label>
+                    <input id="f-pref" name="pref" placeholder="例: 兵庫県"
                       className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                       value={formData.pref} onChange={(e) => setFormData({ ...formData, pref: e.target.value })} />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">訪問日</label>
-                    <input type="date"
+                    <label htmlFor="f-date" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">訪問日</label>
+                    <input id="f-date" name="visitDate" type="date"
                       className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                       value={formData.visitDate} onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })} />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">所在地</label>
-                  <input placeholder="住所を入力"
+                  <label htmlFor="f-address" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">所在地</label>
+                  <input id="f-address" name="address" placeholder="住所を入力"
                     className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                     value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">メモ・備考</label>
-                  <textarea placeholder="造構の状態や、アクセス時の注意点など…" rows={3}
+                  <label htmlFor="f-memo" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">メモ・備考</label>
+                  <textarea id="f-memo" name="memo" placeholder="造構の状態や、アクセス時の注意点など…" rows={3}
                     className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors resize-none"
                     value={formData.memo} onChange={(e) => setFormData({ ...formData, memo: e.target.value })} />
                 </div>
