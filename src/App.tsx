@@ -419,6 +419,7 @@ export default function App() {
   const [photoPreview, setPhotoPreview] = useState("");
   const [photoError, setPhotoError] = useState("");
   const [photoLoading, setPhotoLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // ─── Firestore 読み込み ───────────────────────────────
   useEffect(() => {
@@ -482,7 +483,8 @@ export default function App() {
 
   // ─── 訪問記録 保存 ────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!formData.name) return;
+    e.preventDefault(); if (!formData.name || isSaving) return;
+    setIsSaving(true);
     try {
       const ref = editingId
         ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
@@ -490,11 +492,13 @@ export default function App() {
       await setDoc(ref, { ...formData, visitDate: (formData.visitDate||"").replace(/\//g, "-"), updatedAt: new Date().toISOString() });
       setIsFormOpen(false); setEditingId(null); setFormData(emptyForm); setPhotoPreview(""); setPhotoError("");
     } catch (err) { console.error(err); }
+    finally { setIsSaving(false); }
   };
 
   // ─── ウィッシュリスト 保存 ────────────────────────────
   const handleWishSave = async (e: React.FormEvent) => {
-    e.preventDefault(); if (!wishFormData.name) return;
+    e.preventDefault(); if (!wishFormData.name || isSaving) return;
+    setIsSaving(true);
     try {
       const ref = editingWishId
         ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", editingWishId)
@@ -502,6 +506,7 @@ export default function App() {
       await setDoc(ref, { ...wishFormData, updatedAt: new Date().toISOString() });
       setIsWishFormOpen(false); setEditingWishId(null); setWishFormData(emptyWishForm);
     } catch (err) { console.error(err); }
+    finally { setIsSaving(false); }
   };
 
   // ─── ウィッシュ → 訪問済みへ移動 ─────────────────────
@@ -985,8 +990,9 @@ export default function App() {
                   </div>
                 </div>
 
-                <button type="submit"
-                  className="w-full bg-[#B7410E] text-white py-4 rounded-[24px] font-black shadow-xl hover:bg-[#9a3509] transition-all">
+                <button type="submit" disabled={isSaving}
+                  className="w-full bg-[#B7410E] text-white py-4 rounded-[24px] font-black shadow-xl hover:bg-[#9a3509] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {isSaving && <Loader2 size={16} className="animate-spin" />}
                   記録を保存
                 </button>
               </form>
@@ -1066,8 +1072,9 @@ export default function App() {
                     value={wishFormData.memo} onChange={(e) => setWishFormData({ ...wishFormData, memo: e.target.value })} />
                 </div>
 
-                <button type="submit"
-                  className="w-full bg-[#B7410E] text-white py-4 rounded-[24px] font-black shadow-xl hover:bg-[#9a3509] transition-all">
+                <button type="submit" disabled={isSaving}
+                  className="w-full bg-[#B7410E] text-white py-4 rounded-[24px] font-black shadow-xl hover:bg-[#9a3509] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                  {isSaving && <Loader2 size={16} className="animate-spin" />}
                   リストに保存
                 </button>
               </form>
