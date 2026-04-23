@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  collection, onSnapshot, doc, deleteDoc, setDoc, writeBatch
+  collection, onSnapshot, doc, deleteDoc, setDoc, writeBatch,
+  enableIndexedDbPersistence
 } from 'firebase/firestore';
 import {
   Search, Calendar, Trash2, Plus, Star, X, Settings,
@@ -10,12 +11,22 @@ import {
 } from 'lucide-react';
 import { db, appId } from "./firebase";
 
+// ④ Firestoreオフラインキャッシュ有効化（1回のみ実行）
+enableIndexedDbPersistence(db).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn('Offline persistence: multiple tabs open');
+  } else if (err.code === 'unimplemented') {
+    console.warn('Offline persistence: not supported in this browser');
+  }
+});
+
 // ─── 定数 ──────────────────────────────────────────────
 const FIXED_USER_ID = "toshiyuki";
 
 type PageType = "list" | "prefecture" | "map" | "wishlist";
 type RecordType = "castle" | "battlefield";
 type WishPriority = "高" | "中" | "低";
+type WishSortKey = "pref" | "priority";
 
 const PREF_ORDER = [
   "北海道","青森県","岩手県","宮城県","秋田県","山形県","福島県",
@@ -46,11 +57,23 @@ const PREF_COORDS: Record<string, [number, number]> = {
   "鹿児島県":[31.560,130.558],"沖縄県":[26.212,127.681],
 };
 
+const PRIORITY_ORDER: Record<WishPriority, number> = { "高": 0, "中": 1, "低": 2 };
+
+const PRIORITY_STYLE: Record<WishPriority, string> = {
+  "高": "bg-rose-50 text-rose-700 border-rose-200",
+  "中": "bg-amber-50 text-amber-700 border-amber-200",
+  "低": "bg-stone-50 text-stone-500 border-stone-200",
+};
+
 const stableHash = (str: string): number => {
   let h = 0;
   for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
   return h;
 };
+
+// ① 五十音順ソート用comparator
+const jaSort = (a: string, b: string) =>
+  (a || "").localeCompare(b || "", "ja", { sensitivity: "base" });
 
 // ─── 写真圧縮 ───────────────────────────────────────────
 const MAX_BYTES = 50 * 1024;
@@ -114,12 +137,6 @@ const Stars = ({ rating, size = 12 }: { rating: number; size?: number }) => (
   </div>
 );
 
-const PRIORITY_STYLE: Record<WishPriority, string> = {
-  "高": "bg-rose-50 text-rose-700 border-rose-200",
-  "中": "bg-amber-50 text-amber-700 border-amber-200",
-  "低": "bg-stone-50 text-stone-500 border-stone-200",
-};
-
 // ─── 都道府県一覧ページ ─────────────────────────────────
 
 const PrefecturePage = ({ castles }: { castles: any[] }) => {
@@ -155,7 +172,6 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
           </p>
         </div>
       </div>
-
       <div className="space-y-3">
         {grouped.map(({ pref, items }) => (
           <div key={pref} className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
@@ -169,9 +185,7 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
               {[...items].sort((a, b) => (b.rating || 5) - (a.rating || 5)).map((castle) => (
                 <div key={castle.id} className="pl-10 pr-5 py-2 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
-                    {castle.recordType === "battlefield" && (
-                      <Sword size={11} className="text-stone-400 shrink-0" />
-                    )}
+                    {castle.recordType === "battlefield" && <Sword size={11} className="text-stone-400 shrink-0" />}
                     <span className="text-sm font-bold text-stone-800 truncate">{castle.name}</span>
                   </div>
                   <Stars rating={castle.rating || 5} size={11} />
@@ -181,7 +195,6 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
           </div>
         ))}
       </div>
-
       {unvisitedPrefs.length > 0 && (
         <div className="mt-6">
           <div className="flex items-center gap-2 mb-3">
@@ -310,11 +323,23 @@ const WishlistPage = ({ wishes, onEdit, onDelete, onVisited }: {
   onDelete: (id: string, name: string) => void;
   onVisited: (w: any) => void;
 }) => {
-  const grouped = useMemo(() => {
-    const map: Record<WishPriority, any[]> = { "高": [], "中": [], "低": [] };
-    wishes.forEach((w) => { const p = (w.priority || "中") as WishPriority; map[p].push(w); });
-    return map;
-  }, [wishes]);
+  const [sortKey, setSortKey] = useState<WishSortKey>("priority");
+
+  const sorted = useMemo(() => {
+    return [...wishes].sort((a, b) => {
+      if (sortKey === "pref") {
+        const pa = PREF_ORDER.indexOf(a.pref); const pb = PREF_ORDER.indexOf(b.pref);
+        const va = pa === -1 ? 999 : pa; const vb = pb === -1 ? 999 : pb;
+        if (va !== vb) return va - vb;
+        return jaSort(a.name, b.name);
+      } else {
+        const pa = PRIORITY_ORDER[a.priority as WishPriority] ?? 1;
+        const pb = PRIORITY_ORDER[b.priority as WishPriority] ?? 1;
+        if (pa !== pb) return pa - pb;
+        return jaSort(a.pref || "", b.pref || "");
+      }
+    });
+  }, [wishes, sortKey]);
 
   if (wishes.length === 0) return (
     <div className="flex flex-col items-center justify-center py-32 text-stone-300">
@@ -325,67 +350,73 @@ const WishlistPage = ({ wishes, onEdit, onDelete, onVisited }: {
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 pb-28">
-      <div className="space-y-6">
-        {(["高", "中", "低"] as WishPriority[]).map((priority) => {
-          const items = grouped[priority]; if (items.length === 0) return null;
-          return (
-            <div key={priority}>
-              <div className="flex items-center gap-2 mb-3">
-                <span className={`text-[10px] font-black px-3 py-1 rounded-full border ${PRIORITY_STYLE[priority]}`}>
-                  優先度：{priority}
+      {/* ソートボタン */}
+      <div className="flex gap-2 mb-5">
+        {([["priority","優先度順"],["pref","都道府県順"]] as [WishSortKey,string][]).map(([key, label]) => (
+          <button key={key} onClick={() => setSortKey(key)}
+            className={`px-4 py-1.5 rounded-full text-[11px] font-black border transition-all ${
+              sortKey === key
+                ? "bg-[#B7410E] text-white border-[#B7410E] shadow"
+                : "bg-white text-stone-500 border-stone-200 hover:border-stone-400"
+            }`}>{label}</button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {sorted.map((w) => (
+          <div key={w.id} className="bg-white border border-stone-200 rounded-[24px] p-5 shadow-sm hover:shadow-lg transition-all group">
+            <div className="flex items-start justify-between gap-2 mb-2">
+              <div className="flex flex-wrap gap-1.5">
+                {w.pref && (
+                  <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                    {w.pref}
+                  </span>
+                )}
+                {w.wishType && (
+                  <span className="text-[10px] font-black text-stone-600 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-full">
+                    {w.wishType === "battlefield" ? "古戦場" : "城"}
+                  </span>
+                )}
+                <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${PRIORITY_STYLE[w.priority as WishPriority] || PRIORITY_STYLE["中"]}`}>
+                  {w.priority || "中"}
                 </span>
-                <span className="text-[10px] text-stone-400 font-bold">{items.length} 件</span>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {items.map((w) => (
-                  <div key={w.id} className="bg-white border border-stone-200 rounded-[24px] p-5 shadow-sm hover:shadow-lg transition-all group">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        {w.pref && (
-                          <span className="text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
-                            {w.pref}
-                          </span>
-                        )}
-                        {w.wishType && (
-                          <span className="text-[10px] font-black text-stone-600 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-full">
-                            {w.wishType === "battlefield" ? "古戦場" : "城"}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <h3 className="text-lg font-black text-stone-900 leading-tight mb-1 flex items-center gap-1.5">
-                      <span className="truncate">{w.name}</span>
-                      <a href={`https://ja.wikipedia.org/wiki/${encodeURIComponent(w.name)}`}
-                        target="_blank" rel="noopener noreferrer"
-                        className="text-stone-200 hover:text-stone-600 transition-colors shrink-0">
-                        <ExternalLink size={13} />
-                      </a>
-                    </h3>
-                    {w.memo && (
-                      <p className="text-[11px] text-stone-500 italic bg-stone-50 rounded-xl px-3 py-2 mt-2 line-clamp-2 border border-stone-100">
-                        {w.memo}
-                      </p>
-                    )}
-                    <div className="flex gap-2 mt-4">
-                      <button onClick={() => onVisited(w)}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[11px] font-black hover:bg-amber-100 transition-all">
-                        <CheckCircle size={13} /> 訪問済みへ
-                      </button>
-                      <button onClick={() => onEdit(w)}
-                        className="p-2 bg-stone-50 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-full transition-all">
-                        <Edit3 size={14} />
-                      </button>
-                      <button onClick={() => onDelete(w.id, w.name)}
-                        className="p-2 bg-stone-50 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
-          );
-        })}
+            <h3 className="text-lg font-black text-stone-900 leading-tight mb-1 flex items-center gap-1.5">
+              <span className="truncate">{w.name}</span>
+              <a href={`https://ja.wikipedia.org/wiki/${encodeURIComponent(w.name)}`}
+                target="_blank" rel="noopener noreferrer"
+                className="text-stone-200 hover:text-stone-600 transition-colors shrink-0">
+                <ExternalLink size={13} />
+              </a>
+            </h3>
+            {w.address && (
+              <div className="flex items-start gap-1.5 mt-1 mb-1">
+                <MapPin size={11} className="text-stone-300 mt-0.5 shrink-0" />
+                <span className="text-[11px] text-stone-500 line-clamp-1">{w.address}</span>
+              </div>
+            )}
+            {w.memo && (
+              <p className="text-[11px] text-stone-500 italic bg-stone-50 rounded-xl px-3 py-2 mt-2 line-clamp-2 border border-stone-100">
+                {w.memo}
+              </p>
+            )}
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => onVisited(w)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[11px] font-black hover:bg-amber-100 transition-all">
+                <CheckCircle size={13} /> 訪問済みへ
+              </button>
+              <button onClick={() => onEdit(w)}
+                className="p-2 bg-stone-50 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-full transition-all">
+                <Edit3 size={14} />
+              </button>
+              <button onClick={() => onDelete(w.id, w.name)}
+                className="p-2 bg-stone-50 text-stone-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-all">
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -411,8 +442,17 @@ export default function App() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const emptyForm = { name: "", aka: "", pref: "", province: "", address: "", visitDate: "", rating: 5, memo: "", photo: "", recordType: "castle" as RecordType };
-  const emptyWishForm = { name: "", pref: "", province: "", memo: "", priority: "中" as WishPriority, wishType: "castle" as RecordType };
+  // ② 古戦場「年」フィールド追加
+  const emptyForm = {
+    name: "", aka: "", pref: "", province: "", address: "",
+    visitDate: "", battleYear: "", rating: 5, memo: "", photo: "",
+    recordType: "castle" as RecordType
+  };
+  // ③ 行きたいリストに住所追加
+  const emptyWishForm = {
+    name: "", pref: "", province: "", address: "", memo: "",
+    priority: "中" as WishPriority, wishType: "castle" as RecordType
+  };
   const [formData, setFormData] = useState<typeof emptyForm>(emptyForm);
   const [wishFormData, setWishFormData] = useState<typeof emptyWishForm>(emptyWishForm);
   const [editingWishId, setEditingWishId] = useState<string | null>(null);
@@ -449,22 +489,33 @@ export default function App() {
         .toLowerCase().includes(searchTerm.toLowerCase());
       return matchType && matchSearch;
     });
+
     result.sort((a, b) => {
       let valA: any, valB: any;
+      const dir = sortConfig.direction === "asc" ? 1 : -1;
+
       if (sortConfig.key === "pref") {
-        valA = PREF_ORDER.indexOf(a.pref); valB = PREF_ORDER.indexOf(b.pref);
-        if (valA === -1) valA = 999; if (valB === -1) valB = 999;
+        // ① 都道府県：五十音順
+        const r = jaSort(a.pref || "", b.pref || "");
+        if (r !== 0) return r * dir;
+        return jaSort(a.name || "", b.name || "");
       } else if (sortConfig.key === "visitDate") {
         const toDate = (v: any) => { if (!v) return 0; if (v.toDate) return v.toDate().getTime(); return new Date(v).getTime(); };
         valA = toDate(a.visitDate); valB = toDate(b.visitDate);
       } else if (sortConfig.key === "rating") {
         valA = a.rating || 0; valB = b.rating || 0;
+        if (valA !== valB) return (valA < valB ? -1 : 1) * dir;
+        // ① 評価が同じ場合は五十音順
+        return jaSort(a.name || "", b.name || "");
+      } else if (sortConfig.key === "battleYear") {
+        // ② 年順
+        valA = parseInt(a.battleYear || "0"); valB = parseInt(b.battleYear || "0");
       } else {
         valA = (a[sortConfig.key]||"").toString(); valB = (b[sortConfig.key]||"").toString();
       }
-      if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-      if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-      return (b.updatedAt||"").localeCompare(a.updatedAt||"");
+      if (valA < valB) return -1 * dir;
+      if (valA > valB) return 1 * dir;
+      return 0;
     });
     return result;
   }, [castles, searchTerm, sortConfig, recordTab]);
@@ -516,9 +567,9 @@ export default function App() {
     try {
       const ref = doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
       await setDoc(ref, {
-        name: w.name, pref: w.pref || "", province: w.province || "",
-        aka: "", address: "", visitDate: "", rating: 5,
-        memo: w.memo || "", photo: "", recordType: type, updatedAt: new Date().toISOString(),
+        name: w.name, pref: w.pref||"", province: w.province||"",
+        address: w.address||"", aka: "", visitDate: "", battleYear: "",
+        rating: 5, memo: w.memo||"", photo: "", recordType: type, updatedAt: new Date().toISOString(),
       });
       await deleteDoc(doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", w.id));
       setCurrentPage("list"); setRecordTab(type);
@@ -527,14 +578,28 @@ export default function App() {
 
   // ─── フォームを開く ───────────────────────────────────
   const openForm = (castle?: any) => {
-    if (castle) { setFormData({ ...emptyForm, ...castle }); setPhotoPreview(castle.photo || ""); setEditingId(castle.id); }
-    else { setFormData({ ...emptyForm, recordType: recordTab }); setPhotoPreview(""); setEditingId(null); }
+    if (castle) {
+      setFormData({ ...emptyForm, ...castle });
+      setPhotoPreview(castle.photo || "");
+      setEditingId(castle.id);
+    } else {
+      setFormData({ ...emptyForm, recordType: recordTab });
+      setPhotoPreview(""); setEditingId(null);
+    }
     setPhotoError(""); setIsFormOpen(true);
   };
 
   const openWishForm = (w?: any) => {
-    if (w) { setWishFormData({ name: w.name, pref: w.pref||"", province: w.province||"", memo: w.memo||"", priority: w.priority||"中", wishType: w.wishType||"castle" }); setEditingWishId(w.id); }
-    else { setWishFormData(emptyWishForm); setEditingWishId(null); }
+    if (w) {
+      setWishFormData({
+        name: w.name, pref: w.pref||"", province: w.province||"",
+        address: w.address||"", memo: w.memo||"",
+        priority: w.priority||"中", wishType: w.wishType||"castle"
+      });
+      setEditingWishId(w.id);
+    } else {
+      setWishFormData(emptyWishForm); setEditingWishId(null);
+    }
     setIsWishFormOpen(true);
   };
 
@@ -563,7 +628,7 @@ export default function App() {
             name, pref: col.pref !== -1 ? cols[col.pref] : "", aka: col.aka !== -1 ? cols[col.aka] : "",
             province: col.prov !== -1 ? cols[col.prov] : "", address: col.addr !== -1 ? cols[col.addr] : "",
             visitDate: col.date !== -1 ? cols[col.date].replace(/\//g, "-") : "",
-            rating: 5, memo: col.memo !== -1 ? cols[col.memo] : "",
+            battleYear: "", rating: 5, memo: col.memo !== -1 ? cols[col.memo] : "",
             photo: "", recordType: "castle", updatedAt: new Date().toISOString(),
           });
           count++; if (count >= 450) break;
@@ -618,14 +683,14 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── 訪問記録ページ：検索バー固定エリア ── */}
+      {/* ── 訪問記録：検索バー固定エリア ── */}
       {currentPage === "list" && (
         <div className="bg-[#FDFCFB] border-b border-stone-100 sticky top-[73px] z-40 px-4 pt-3 pb-2 md:px-6">
           <div className="max-w-5xl mx-auto space-y-2">
             {/* 城 / 古戦場 タブ */}
             <div className="flex gap-2">
               {(["castle", "battlefield"] as RecordType[]).map((type) => (
-                <button key={type} onClick={() => setRecordTab(type)}
+                <button key={type} onClick={() => { setRecordTab(type); setSearchTerm(""); setSortConfig({ key: "visitDate", direction: "desc" }); }}
                   className={`px-5 py-1.5 rounded-full text-[11px] font-black border transition-all ${
                     recordTab === type
                       ? "bg-stone-800 text-white border-stone-800"
@@ -638,28 +703,23 @@ export default function App() {
             {/* 検索バー */}
             <div className="relative group">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-300 group-focus-within:text-stone-600 transition-colors" size={18} />
-              <input
-                ref={searchInputRef}
-                type="text"
+              <input ref={searchInputRef} type="text"
                 placeholder={`${tabLabel}名、県名、旧国、住所、メモで検索...`}
                 className="w-full py-3 pl-11 pr-10 bg-white border border-stone-200 rounded-2xl text-sm outline-none focus:ring-4 focus:ring-amber-400/10 focus:border-amber-300 shadow-sm transition-all"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-              {searchTerm ? (
+                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+              {searchTerm && (
                 <button onClick={() => { setSearchTerm(""); searchInputRef.current?.focus(); }}
                   className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-stone-400 hover:text-stone-700 transition-colors">
                   <X size={16} />
                 </button>
-              ) : null}
+              )}
             </div>
             {/* ソートボタン */}
             <div className="flex gap-2 overflow-x-auto pb-1">
-              {[
-                { label: "訪問日順", key: "visitDate" },
-                { label: "都道府県順", key: "pref" },
-                { label: "評価順", key: "rating" },
-              ].map((item) => (
+              {(recordTab === "castle"
+                ? [{ label: "訪問日順", key: "visitDate" }, { label: "都道府県順", key: "pref" }, { label: "評価順", key: "rating" }]
+                : [{ label: "訪問日順", key: "visitDate" }, { label: "都道府県順", key: "pref" }, { label: "評価順", key: "rating" }, { label: "年順", key: "battleYear" }]
+              ).map((item) => (
                 <button key={item.key} onClick={() => toggleSort(item.key)}
                   className={`flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[11px] font-black border whitespace-nowrap transition-all ${
                     sortConfig.key === item.key
@@ -675,7 +735,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── メインコンテンツ（スクロール領域） ── */}
+      {/* ── メインコンテンツ ── */}
       <main className={`flex-1 overflow-y-auto ${currentPage === "map" ? "" : "max-w-5xl mx-auto w-full p-4 md:p-6"}`}>
 
         {/* ══ 訪問記録ページ ══ */}
@@ -696,8 +756,6 @@ export default function App() {
                 {processedData.map((castle) => (
                   <div key={castle.id}
                     className="bg-white border border-stone-200 rounded-[28px] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
-
-                    {/* 2カラムレイアウト */}
                     <div className="flex gap-3 mb-1">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap gap-1.5 mb-1.5">
@@ -737,7 +795,11 @@ export default function App() {
                     <div className="space-y-1.5 text-[12px] text-stone-500">
                       <div className="flex items-center gap-2 font-bold text-stone-700 h-[18px]">
                         <Calendar size={12} className="text-amber-400 shrink-0" />
-                        <span>{castle.visitDate || ""}</span>
+                        <span>
+                          {castle.recordType === "battlefield" && castle.battleYear
+                            ? `${castle.battleYear}年${castle.visitDate ? ` / 訪問: ${castle.visitDate}` : ""}`
+                            : castle.visitDate || ""}
+                        </span>
                       </div>
                       <div className="flex items-start gap-2 h-[18px]">
                         <MapPin size={12} className="text-stone-300 mt-0.5 shrink-0" />
@@ -844,9 +906,9 @@ export default function App() {
               </button>
               <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
               <button onClick={() => {
-                const header = "都道府県,城名,別名,旧国,住所,訪問日,評価,メモ,種別\n";
+                const header = "都道府県,城名,別名,旧国,住所,訪問日,合戦年,評価,メモ,種別\n";
                 const rows = castles.map((c) =>
-                  `"${c.pref||""}","${c.name}","${c.aka||""}","${c.province||""}","${c.address||""}","${c.visitDate||""}",${c.rating},"${c.memo||""}","${c.recordType||"castle"}"`
+                  `"${c.pref||""}","${c.name}","${c.aka||""}","${c.province||""}","${c.address||""}","${c.visitDate||""}","${c.battleYear||""}",${c.rating},"${c.memo||""}","${c.recordType||"castle"}"`
                 ).join("\n");
                 const blob = new Blob([new Uint8Array([0xef,0xbb,0xbf]), header+rows], { type: "text/csv;charset=utf-8;" });
                 const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
@@ -884,7 +946,7 @@ export default function App() {
             <div className="p-6 md:p-8 overflow-y-auto" style={{ paddingBottom: "80px" }}>
               <form onSubmit={handleSave} className="space-y-5">
 
-                {/* 種別タブ */}
+                {/* 種別 */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">種別</label>
                   <div className="flex gap-2">
@@ -903,7 +965,8 @@ export default function App() {
                   <label htmlFor="f-name" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">
                     {formData.recordType === "castle" ? "城郭名" : "古戦場名"}
                   </label>
-                  <input id="f-name" name="name" required placeholder={formData.recordType === "castle" ? "例: 姫路城" : "例: 関ヶ原"}
+                  <input id="f-name" name="name" required
+                    placeholder={formData.recordType === "castle" ? "例: 姫路城" : "例: 関ヶ原"}
                     className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent font-black text-stone-900 outline-none focus:bg-white focus:border-stone-200 transition-colors"
                     value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                 </div>
@@ -937,6 +1000,17 @@ export default function App() {
                       value={formData.visitDate} onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })} />
                   </div>
                 </div>
+
+                {/* ② 古戦場のみ「年」フィールドを表示 */}
+                {formData.recordType === "battlefield" && (
+                  <div className="space-y-1.5">
+                    <label htmlFor="f-battleYear" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">合戦年（西暦）</label>
+                    <input id="f-battleYear" name="battleYear" type="number"
+                      placeholder="例: 1600"
+                      className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                      value={formData.battleYear} onChange={(e) => setFormData({ ...formData, battleYear: e.target.value })} />
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <label htmlFor="f-address" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">所在地</label>
@@ -1015,7 +1089,6 @@ export default function App() {
             <div className="p-6 md:p-8 overflow-y-auto" style={{ paddingBottom: "80px" }}>
               <form onSubmit={handleWishSave} className="space-y-5">
 
-                {/* 種別 */}
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">種別</label>
                   <div className="flex gap-2">
@@ -1052,7 +1125,14 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* 優先度 */}
+                {/* ③ 住所追加 */}
+                <div className="space-y-1.5">
+                  <label htmlFor="w-address" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">住所</label>
+                  <input id="w-address" name="address" placeholder="例: 長野県松本市丸の内4-1"
+                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                    value={wishFormData.address} onChange={(e) => setWishFormData({ ...wishFormData, address: e.target.value })} />
+                </div>
+
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">優先度</label>
                   <div className="flex gap-2">
