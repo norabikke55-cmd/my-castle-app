@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  collection, onSnapshot, doc, deleteDoc, setDoc, writeBatch,
-  enableIndexedDbPersistence
+  collection, onSnapshot, doc, deleteDoc, setDoc, writeBatch
 } from 'firebase/firestore';
 import {
   Search, Calendar, Trash2, Plus, Star, X, Settings,
@@ -10,15 +9,6 @@ import {
   Camera, XCircle, Heart, CheckCircle, Sword
 } from 'lucide-react';
 import { db, appId } from "./firebase";
-
-// ④ Firestoreオフラインキャッシュ有効化（1回のみ実行）
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Offline persistence: multiple tabs open');
-  } else if (err.code === 'unimplemented') {
-    console.warn('Offline persistence: not supported in this browser');
-  }
-});
 
 // ─── 定数 ──────────────────────────────────────────────
 const FIXED_USER_ID = "toshiyuki";
@@ -657,16 +647,18 @@ export default function App() {
       {/* ── ヘッダー ── */}
       <header className="bg-white/95 border-b border-stone-200 sticky top-0 z-50 p-4 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <CastleIcon />
-            <div className="flex items-baseline gap-2">
-              <h1 className="text-xl font-black tracking-tighter text-stone-900">攻城記録</h1>
-              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-amber-200">
-                🏯 {castles.filter(c => (c.recordType || "castle") === "castle").length}
-              </span>
-              <span className="bg-stone-50 text-stone-500 px-2 py-0.5 rounded-md text-[10px] font-black border border-stone-200">
-                ⚔️ {castles.filter(c => c.recordType === "battlefield").length}
-              </span>
+            <div>
+              <h1 className="text-xl font-black tracking-tighter text-stone-900 leading-tight">攻城記録</h1>
+              <div className="flex gap-1.5 mt-0.5">
+                <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[9px] font-black border border-amber-200">
+                  🏯 {castles.filter(c => (c.recordType || "castle") === "castle").length}
+                </span>
+                <span className="bg-stone-50 text-stone-500 px-1.5 py-0.5 rounded text-[9px] font-black border border-stone-200">
+                  ⚔️ {castles.filter(c => c.recordType === "battlefield").length}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-1">
