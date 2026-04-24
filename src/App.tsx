@@ -647,18 +647,16 @@ export default function App() {
       {/* ── ヘッダー ── */}
       <header className="bg-white/95 border-b border-stone-200 sticky top-0 z-50 p-4 shadow-sm">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <CastleIcon />
-            <div>
-              <h1 className="text-xl font-black tracking-tighter text-stone-900 leading-tight">攻城記録</h1>
-              <div className="flex gap-1.5 mt-0.5">
-                <span className="bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded text-[9px] font-black border border-amber-200">
-                  🏯 {castles.filter(c => (c.recordType || "castle") === "castle").length}
-                </span>
-                <span className="bg-stone-50 text-stone-500 px-1.5 py-0.5 rounded text-[9px] font-black border border-stone-200">
-                  ⚔️ {castles.filter(c => c.recordType === "battlefield").length}
-                </span>
-              </div>
+            <h1 className="text-xl font-black tracking-tighter text-stone-900">攻城記録</h1>
+            <div className="flex flex-col gap-0.5">
+              <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[11px] font-black border border-amber-200 leading-tight">
+                🏯 {castles.filter(c => (c.recordType || "castle") === "castle").length} 城
+              </span>
+              <span className="bg-stone-50 text-stone-500 px-2 py-0.5 rounded text-[11px] font-black border border-stone-200 leading-tight">
+                ⚔️ {castles.filter(c => c.recordType === "battlefield").length} 古戦場
+              </span>
             </div>
           </div>
           <div className="flex items-center gap-1">
