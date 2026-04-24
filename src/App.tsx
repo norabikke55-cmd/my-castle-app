@@ -461,12 +461,16 @@ export default function App() {
   const [photoLoading, setPhotoLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // ─── Firestore 読み込み ───────────────────────────────
+  // ─── Firestore 読み込み（④ キャッシュ優先：初回もキャッシュから即表示） ──
   useEffect(() => {
     setLoading(true);
     const qCol = collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles");
     const unsub = onSnapshot(qCol,
-      (snap) => { setCastles(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); setLoading(false); },
+      { includeMetadataChanges: false },
+      (snap) => {
+        setCastles(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+        setLoading(false); // キャッシュからでもサーバーからでも即座に非表示
+      },
       (err) => { console.error(err); setLoading(false); }
     );
     return () => unsub();
@@ -495,9 +499,10 @@ export default function App() {
       const dir = sortConfig.direction === "asc" ? 1 : -1;
 
       if (sortConfig.key === "pref") {
-        // ① 都道府県：五十音順
-        const r = jaSort(a.pref || "", b.pref || "");
-        if (r !== 0) return r * dir;
+        // 都道府県はコード順（PREF_ORDER）、同一都道府県内は五十音順
+        let pa = PREF_ORDER.indexOf(a.pref); if (pa === -1) pa = 999;
+        let pb = PREF_ORDER.indexOf(b.pref); if (pb === -1) pb = 999;
+        if (pa !== pb) return (pa - pb) * dir;
         return jaSort(a.name || "", b.name || "");
       } else if (sortConfig.key === "visitDate") {
         const toDate = (v: any) => { if (!v) return 0; if (v.toDate) return v.toDate().getTime(); return new Date(v).getTime(); };
@@ -657,7 +662,10 @@ export default function App() {
             <div className="flex items-baseline gap-2">
               <h1 className="text-xl font-black tracking-tighter text-stone-900">攻城記録</h1>
               <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md text-[10px] font-black border border-amber-200">
-                {castles.length} 件
+                🏯 {castles.filter(c => (c.recordType || "castle") === "castle").length}
+              </span>
+              <span className="bg-stone-50 text-stone-500 px-2 py-0.5 rounded-md text-[10px] font-black border border-stone-200">
+                ⚔️ {castles.filter(c => c.recordType === "battlefield").length}
               </span>
             </div>
           </div>
