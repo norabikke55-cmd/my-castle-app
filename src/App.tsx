@@ -729,10 +729,25 @@ export default function App() {
   };
 
   // ─── フォームを開く ───────────────────────────────────
+  // 日付を YYYY-MM-DD に正規化（スラッシュ区切りや不完全な形式に対応）
+  const normalizeDate = (v: any): string => {
+    if (!v) return "";
+    if (typeof v === "object" && v.toDate) v = v.toDate().toISOString().split("T")[0];
+    const s = String(v).trim();
+    // YYYY/MM/DD → YYYY-MM-DD
+    const slashMatch = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (slashMatch) return `${slashMatch[1]}-${slashMatch[2].padStart(2,"0")}-${slashMatch[3].padStart(2,"0")}`;
+    // YYYY-MM-DD はそのまま
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    // その他はinput type=dateが認識できないので空欄に
+    return "";
+  };
+
   const openForm = (castle?: any) => {
     if (castle) {
       setFormData({
         ...emptyForm, ...castle,
+        visitDate: normalizeDate(castle.visitDate),
         lat: castle.lat ?? null,
         lng: castle.lng ?? null,
       });
