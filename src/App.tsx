@@ -85,34 +85,40 @@ const fetchCoordsFromWikipedia = async (name: string): Promise<{ lat: number; ln
 // Nominatim（OpenStreetMap）で住所または城名から座標を取得
 const fetchCoordsFromNominatim = async (query: string): Promise<{ lat: number; lng: number } | null> => {
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ja`;
-    const res = await fetch(url, { headers: { "User-Agent": "castle-log-app" } });
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ja&countrycodes=jp`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
     const data = await res.json();
     if (!data?.[0]) return null;
     return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
   } catch { return null; }
 };
 
+// 日本国内の座標かチェック（おおよその範囲）
+const isInJapan = (lat: number, lng: number): boolean =>
+  lat >= 24 && lat <= 46 && lng >= 122 && lng <= 154;
+
 // 座標取得のメイン関数（Wikipedia → 住所 → 城名の順で試みる）
 const resolveCoords = async (name: string, address: string, pref: string): Promise<{ lat: number; lng: number } | null> => {
   // 1. Wikipedia から取得
   const fromWiki = await fetchCoordsFromWikipedia(name);
-  if (fromWiki) return fromWiki;
+  if (fromWiki && isInJapan(fromWiki.lat, fromWiki.lng)) return fromWiki;
 
-  // 少し待つ（Nominatimのレート制限対策）
   await new Promise((r) => setTimeout(r, 1000));
 
   // 2. 住所があれば住所でNominatim検索
   if (address) {
     const fromAddr = await fetchCoordsFromNominatim(address);
-    if (fromAddr) return fromAddr;
+    if (fromAddr && isInJapan(fromAddr.lat, fromAddr.lng)) return fromAddr;
     await new Promise((r) => setTimeout(r, 1000));
   }
 
   // 3. 城名 + 都道府県でNominatim検索
   const query = pref ? `${name} ${pref}` : name;
   const fromName = await fetchCoordsFromNominatim(query);
-  return fromName;
+  if (fromName && isInJapan(fromName.lat, fromName.lng)) return fromName;
+
+  return null;
 };
 const MAX_BYTES = 50 * 1024;
 
