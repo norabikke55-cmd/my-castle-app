@@ -694,7 +694,12 @@ export default function App() {
 
       if (needsGeocode) {
         const coords = await resolveCoords(formData.name, formData.address, formData.pref);
-        if (coords) { lat = coords.lat; lng = coords.lng; }
+        if (coords) {
+          lat = coords.lat; lng = coords.lng;
+        } else {
+          // 座標が取れなかった場合、既存の誤座標もクリア
+          lat = null; lng = null;
+        }
       }
 
       await setDoc(ref, {
