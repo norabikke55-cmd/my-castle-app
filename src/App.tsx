@@ -678,12 +678,16 @@ export default function App() {
         ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
         : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
 
-      // 座標が未取得、または編集時に名前か住所が変わった場合に再取得
+      // 新規登録：常に座標取得
+      // 編集時：名前か住所が変わった場合、または座標が日本国外の場合に再取得
       const existing = editingId ? castles.find(c => c.id === editingId) : null;
       const nameChanged = existing && existing.name !== formData.name;
       const addressChanged = existing && existing.address !== formData.address;
+      const hasInvalidCoords = formData.lat && formData.lng
+        ? !isInJapan(formData.lat, formData.lng)
+        : false;
       const noCoords = !formData.lat || !formData.lng;
-      const needsGeocode = noCoords || nameChanged || addressChanged;
+      const needsGeocode = !editingId || noCoords || nameChanged || addressChanged || hasInvalidCoords;
 
       let lat = formData.lat;
       let lng = formData.lng;
