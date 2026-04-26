@@ -254,7 +254,7 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
 
 // ─── マップページ ───────────────────────────────────────
 
-const MapPage = ({ castles }: { castles: any[] }) => {
+const MapPage = ({ castles, onCastleSelect }: { castles: any[]; onCastleSelect: (castle: any) => void }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
@@ -276,7 +276,22 @@ const MapPage = ({ castles }: { castles: any[] }) => {
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 18,
       }).addTo(map);
-      mapInstanceRef.current = map; setMapReady(true);
+      mapInstanceRef.current = map;
+
+      // ポップアップ内の城名クリックを処理
+      map.on('popupopen', (e: any) => {
+        const el = e.popup.getElement();
+        if (!el) return;
+        const nameEl = el.querySelector('[data-castle-id]');
+        if (!nameEl) return;
+        const castleId = nameEl.getAttribute('data-castle-id');
+        nameEl.addEventListener('click', () => {
+          const found = (map as any)._castlesRef?.find((c: any) => c.id === castleId);
+          if (found) onCastleSelect(found);
+        });
+      });
+
+      setMapReady(true);
     };
     if ((window as any).L) { init(); }
     else {
@@ -291,6 +306,9 @@ const MapPage = ({ castles }: { castles: any[] }) => {
     if (!mapReady || !mapInstanceRef.current) return;
     const L = (window as any).L;
     markersRef.current.forEach((m) => m.remove()); markersRef.current = [];
+
+    // popupopen ハンドラーから参照できるよう castles を保存
+    (mapInstanceRef.current as any)._castlesRef = castles;
 
     // ② 評価ごとにサイズ・形・色を明確に区別
     const markerStyle = (r: number): { color: string; size: number; shape: string; border: string } => {
@@ -329,13 +347,16 @@ const MapPage = ({ castles }: { castles: any[] }) => {
         `<span style="color:${n <= (castle.rating||5) ? "#F59E0B" : "#e5e7eb"};font-size:13px">★</span>`
       ).join("");
       const marker = L.marker([lat, lng], { icon }).addTo(mapInstanceRef.current).bindPopup(`
-        <div style="font-family:sans-serif;min-width:140px;padding:2px">
-          <div style="font-weight:900;font-size:14px;margin-bottom:3px;color:#1c1917">${castle.name}</div>
+        <div style="font-family:sans-serif;min-width:150px;padding:2px">
+          <div data-castle-id="${castle.id}" style="font-weight:900;font-size:14px;margin-bottom:3px;color:#B7410E;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">
+            ${castle.name}
+          </div>
           ${castle.recordType === "battlefield" ? `<div style="font-size:10px;color:#7c6a56;font-weight:700;margin-bottom:2px">古戦場</div>` : ""}
           ${castle.province ? `<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:2px">${castle.province}国</div>` : ""}
           ${castle.pref ? `<div style="font-size:10px;color:#78716c;margin-bottom:4px">${castle.pref}</div>` : ""}
           ${castle.visitDate ? `<div style="font-size:11px;color:#666;margin-bottom:4px">📅 ${castle.visitDate}</div>` : ""}
           <div>${starsHtml}</div>
+          <div style="margin-top:6px;font-size:10px;color:#aaa;">城名をタップ → カード表示</div>
         </div>`);
       markersRef.current.push(marker);
       positions.push([lat, lng]);
@@ -542,6 +563,7 @@ export default function App() {
   const [recordTab, setRecordTab] = useState<RecordType>("castle");
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" }>({ key: "visitDate", direction: "desc" });
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -892,7 +914,14 @@ export default function App() {
                 )}
                 {processedData.map((castle) => (
                   <div key={castle.id}
-                    className="bg-white border border-stone-200 rounded-[28px] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group">
+                    id={`castle-card-${castle.id}`}
+                    className={`bg-white border rounded-[28px] p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all group ${
+                      highlightId === castle.id
+                        ? "border-[#B7410E] ring-2 ring-[#B7410E]/30"
+                        : "border-stone-200"
+                    }`}
+                    onAnimationEnd={() => { if (highlightId === castle.id) setHighlightId(null); }}
+                  >
                     <div className="flex gap-3 mb-1">
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap gap-1.5 mb-1.5">
@@ -971,7 +1000,16 @@ export default function App() {
         )}
 
         {currentPage === "prefecture" && <PrefecturePage castles={castles} />}
-        {currentPage === "map" && <MapPage castles={castles} />}
+        {currentPage === "map" && <MapPage castles={castles} onCastleSelect={(castle) => {
+          setCurrentPage("list");
+          setRecordTab(castle.recordType || "castle");
+          setSearchTerm("");
+          setHighlightId(castle.id);
+          setTimeout(() => {
+            const el = document.getElementById(`castle-card-${castle.id}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 300);
+        }} />}
         {currentPage === "wishlist" && (
           <WishlistPage
             wishes={wishes}
