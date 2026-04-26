@@ -488,11 +488,11 @@ export default function App() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // ② 古戦場「年」フィールド追加
   const emptyForm = {
     name: "", aka: "", pref: "", province: "", address: "",
     visitDate: "", battleYear: "", rating: 5, memo: "", photo: "",
-    recordType: "castle" as RecordType
+    recordType: "castle" as RecordType,
+    lat: null as number | null, lng: null as number | null
   };
   // ③ 行きたいリストに住所追加
   const emptyWishForm = {
@@ -592,15 +592,15 @@ export default function App() {
         ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
         : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
 
-      // 座標が未取得、または名前・住所が変わった場合に再取得
-      const needsGeocode = !formData.lat || !formData.lng ||
-        (editingId && (() => {
-          const existing = castles.find(c => c.id === editingId);
-          return existing && (existing.name !== formData.name || existing.address !== formData.address);
-        })());
+      // 座標が未取得、または編集時に名前か住所が変わった場合に再取得
+      const existing = editingId ? castles.find(c => c.id === editingId) : null;
+      const nameChanged = existing && existing.name !== formData.name;
+      const addressChanged = existing && existing.address !== formData.address;
+      const noCoords = !formData.lat || !formData.lng;
+      const needsGeocode = noCoords || nameChanged || addressChanged;
 
-      let lat = (formData as any).lat || null;
-      let lng = (formData as any).lng || null;
+      let lat = formData.lat;
+      let lng = formData.lng;
 
       if (needsGeocode) {
         const coords = await resolveCoords(formData.name, formData.address, formData.pref);
@@ -651,7 +651,11 @@ export default function App() {
   // ─── フォームを開く ───────────────────────────────────
   const openForm = (castle?: any) => {
     if (castle) {
-      setFormData({ ...emptyForm, ...castle });
+      setFormData({
+        ...emptyForm, ...castle,
+        lat: castle.lat ?? null,
+        lng: castle.lng ?? null,
+      });
       setPhotoPreview(castle.photo || "");
       setEditingId(castle.id);
     } else {
