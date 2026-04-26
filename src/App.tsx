@@ -65,7 +65,55 @@ const stableHash = (str: string): number => {
 const jaSort = (a: string, b: string) =>
   (a || "").localeCompare(b || "", "ja", { sensitivity: "base" });
 
-// ─── 写真圧縮 ───────────────────────────────────────────
+// ─── 座標取得ユーティリティ ────────────────────────────
+
+// Wikipedia APIで城名から座標を取得
+const fetchCoordsFromWikipedia = async (name: string): Promise<{ lat: number; lng: number } | null> => {
+  try {
+    const url = `https://ja.wikipedia.org/w/api.php?action=query&prop=coordinates&titles=${encodeURIComponent(name)}&format=json&origin=*`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const pages = data?.query?.pages;
+    if (!pages) return null;
+    const page = Object.values(pages)[0] as any;
+    if (!page?.coordinates?.[0]) return null;
+    const { lat, lon } = page.coordinates[0];
+    return { lat, lng: lon };
+  } catch { return null; }
+};
+
+// Nominatim（OpenStreetMap）で住所または城名から座標を取得
+const fetchCoordsFromNominatim = async (query: string): Promise<{ lat: number; lng: number } | null> => {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ja`;
+    const res = await fetch(url, { headers: { "User-Agent": "castle-log-app" } });
+    const data = await res.json();
+    if (!data?.[0]) return null;
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch { return null; }
+};
+
+// 座標取得のメイン関数（Wikipedia → 住所 → 城名の順で試みる）
+const resolveCoords = async (name: string, address: string, pref: string): Promise<{ lat: number; lng: number } | null> => {
+  // 1. Wikipedia から取得
+  const fromWiki = await fetchCoordsFromWikipedia(name);
+  if (fromWiki) return fromWiki;
+
+  // 少し待つ（Nominatimのレート制限対策）
+  await new Promise((r) => setTimeout(r, 1000));
+
+  // 2. 住所があれば住所でNominatim検索
+  if (address) {
+    const fromAddr = await fetchCoordsFromNominatim(address);
+    if (fromAddr) return fromAddr;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+
+  // 3. 城名 + 都道府県でNominatim検索
+  const query = pref ? `${name} ${pref}` : name;
+  const fromName = await fetchCoordsFromNominatim(query);
+  return fromName;
+};
 const MAX_BYTES = 50 * 1024;
 
 const compressImage = (file: File, maxSide: number, quality: number): Promise<string> =>
@@ -244,10 +292,18 @@ const MapPage = ({ castles }: { castles: any[] }) => {
     const markerColor = (r: number) => r >= 5 ? "#B7410E" : r >= 4 ? "#C06030" : r >= 3 ? "#7c6a56" : "#9ca3af";
 
     castles.forEach((castle) => {
-      const coords = PREF_COORDS[castle.pref]; if (!coords) return;
-      const h = stableHash(castle.id || castle.name);
-      const lat = coords[0] + (((h & 0xff) - 128) / 128) * 0.22;
-      const lng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
+      // 保存済み座標を優先、なければ都道府県中心座標にフォールバック
+      let lat: number, lng: number;
+      if (castle.lat && castle.lng) {
+        lat = castle.lat;
+        lng = castle.lng;
+      } else {
+        const coords = PREF_COORDS[castle.pref];
+        if (!coords) return;
+        const h = stableHash(castle.id || castle.name);
+        lat = coords[0] + (((h & 0xff) - 128) / 128) * 0.22;
+        lng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
+      }
       const color = markerColor(castle.rating || 5);
       const emoji = castle.recordType === "battlefield" ? "⚔️" : "🏯";
       const icon = L.divIcon({
@@ -270,7 +326,7 @@ const MapPage = ({ castles }: { castles: any[] }) => {
     });
   }, [castles, mapReady]);
 
-  const validCount = castles.filter((c) => PREF_COORDS[c.pref]).length;
+  const validCount = castles.filter((c) => (c.lat && c.lng) || PREF_COORDS[c.pref]).length;
   return (
     <div className="relative" style={{ height: "calc(100vh - 120px)" }}>
       {!mapReady && (
@@ -535,7 +591,28 @@ export default function App() {
       const ref = editingId
         ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
         : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
-      await setDoc(ref, { ...formData, visitDate: (formData.visitDate||"").replace(/\//g, "-"), updatedAt: new Date().toISOString() });
+
+      // 座標が未取得、または名前・住所が変わった場合に再取得
+      const needsGeocode = !formData.lat || !formData.lng ||
+        (editingId && (() => {
+          const existing = castles.find(c => c.id === editingId);
+          return existing && (existing.name !== formData.name || existing.address !== formData.address);
+        })());
+
+      let lat = (formData as any).lat || null;
+      let lng = (formData as any).lng || null;
+
+      if (needsGeocode) {
+        const coords = await resolveCoords(formData.name, formData.address, formData.pref);
+        if (coords) { lat = coords.lat; lng = coords.lng; }
+      }
+
+      await setDoc(ref, {
+        ...formData,
+        lat, lng,
+        visitDate: (formData.visitDate||"").replace(/\//g, "-"),
+        updatedAt: new Date().toISOString()
+      });
       setIsFormOpen(false); setEditingId(null); setFormData(emptyForm); setPhotoPreview(""); setPhotoError("");
     } catch (err) { console.error(err); }
     finally { setIsSaving(false); }
@@ -1065,7 +1142,7 @@ export default function App() {
                 <button type="submit" disabled={isSaving}
                   className="w-full bg-[#B7410E] text-white py-4 rounded-[24px] font-black shadow-xl hover:bg-[#9a3509] transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
                   {isSaving && <Loader2 size={16} className="animate-spin" />}
-                  記録を保存
+                  {isSaving ? "座標を取得中..." : "記録を保存"}
                 </button>
               </form>
             </div>
