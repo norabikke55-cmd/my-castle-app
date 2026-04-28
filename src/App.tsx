@@ -260,13 +260,22 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
 
 // ─── マップページ ───────────────────────────────────────
 
-const MapPage = ({ castles, onCastleSelect }: { castles: any[]; onCastleSelect: (castle: any) => void }) => {
+const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
+  castles: any[];
+  onCastleSelect: (castle: any) => void;
+  focusCastleId?: string | null;
+  onFocusHandled?: () => void;
+}) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const [mapReady, setMapReady] = useState(false);
   const [mapSearch, setMapSearch] = useState("");
   const mapSearchRef = useRef<HTMLInputElement>(null);
+  const [editingCoord, setEditingCoord] = useState<any>(null);
+  const coordMapRef = useRef<HTMLDivElement>(null);
+  const coordMapInstanceRef = useRef<any>(null);
+  const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
     if (!document.getElementById("leaflet-css")) {
@@ -278,25 +287,34 @@ const MapPage = ({ castles, onCastleSelect }: { castles: any[]; onCastleSelect: 
     const init = () => {
       const L = (window as any).L;
       if (!mapRef.current || mapInstanceRef.current || !L) return;
-      const map = L.map(mapRef.current, { zoomControl: true }).setView([36.5, 137.0], 5);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>', maxZoom: 18,
+      // ④ 名古屋中心・ズーム10
+      const map = L.map(mapRef.current, { zoomControl: true }).setView([35.180, 136.907], 10);
+      // 国土地理院タイル
+      L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+        maxZoom: 18,
       }).addTo(map);
       mapInstanceRef.current = map;
 
-      // ポップアップ内の城名クリックを処理
       map.on('popupopen', (e: any) => {
-        const el = e.popup.getElement();
-        if (!el) return;
+        const el = e.popup.getElement(); if (!el) return;
         const nameEl = el.querySelector('[data-castle-id]');
-        if (!nameEl) return;
-        const castleId = nameEl.getAttribute('data-castle-id');
-        nameEl.addEventListener('click', () => {
-          const found = (map as any)._castlesRef?.find((c: any) => c.id === castleId);
-          if (found) onCastleSelect(found);
-        });
+        if (nameEl) {
+          const castleId = nameEl.getAttribute('data-castle-id');
+          nameEl.addEventListener('click', () => {
+            const found = (map as any)._castlesRef?.find((c: any) => c.id === castleId);
+            if (found) onCastleSelect(found);
+          });
+        }
+        const editEl = el.querySelector('[data-edit-coord-id]');
+        if (editEl) {
+          const editId = editEl.getAttribute('data-edit-coord-id');
+          editEl.addEventListener('click', () => {
+            const found = (map as any)._castlesRef?.find((c: any) => c.id === editId);
+            if (found) { map.closePopup(); setEditingCoord(found); setCoordLatLng(found.lat && found.lng ? { lat: found.lat, lng: found.lng } : null); }
+          });
+        }
       });
-
       setMapReady(true);
     };
     if ((window as any).L) { init(); }
@@ -308,75 +326,94 @@ const MapPage = ({ castles, onCastleSelect }: { castles: any[]; onCastleSelect: 
     return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
   }, []);
 
+  // ② カードからフォーカス
+  useEffect(() => {
+    if (!mapReady || !focusCastleId || !mapInstanceRef.current) return;
+    const castle = castles.find(c => c.id === focusCastleId);
+    if (!castle) return;
+    if (castle.lat && castle.lng) {
+      mapInstanceRef.current.setView([castle.lat, castle.lng], 14, { animate: true });
+      const marker = markersRef.current.find(m => (m as any)._castleId === focusCastleId);
+      if (marker) marker.openPopup();
+    }
+    onFocusHandled?.();
+  }, [focusCastleId, mapReady]);
+
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
     const L = (window as any).L;
     markersRef.current.forEach((m) => m.remove()); markersRef.current = [];
-
-    // popupopen ハンドラーから参照できるよう castles を保存
     (mapInstanceRef.current as any)._castlesRef = castles;
 
-    // ② 評価ごとにサイズ・形・色を明確に区別
-    const markerStyle = (r: number): { color: string; size: number; shape: string; border: string } => {
-      if (r >= 5) return { color: "#B7410E", size: 36, shape: "12px", border: "3px solid #fff" }; // 大・角丸正方形
-      if (r >= 4) return { color: "#d97706", size: 30, shape: "50%",  border: "2px solid #fff" }; // 中・丸・黄
-      if (r >= 3) return { color: "#7c6a56", size: 24, shape: "50%",  border: "2px solid #fff" }; // 小・丸・茶
-      return              { color: "#9ca3af", size: 20, shape: "50%",  border: "2px solid #fff" }; // 極小・丸・灰
+    const markerStyle = (r: number) => {
+      if (r >= 5) return { color: "#B7410E", size: 36, shape: "12px", border: "3px solid #fff" };
+      if (r >= 4) return { color: "#d97706", size: 30, shape: "50%",  border: "2px solid #fff" };
+      if (r >= 3) return { color: "#7c6a56", size: 24, shape: "50%",  border: "2px solid #fff" };
+      return              { color: "#9ca3af", size: 20, shape: "50%",  border: "2px solid #fff" };
     };
 
     const term = mapSearch.trim().toLowerCase();
-    const filtered = term
-      ? castles.filter(c => (c.name + (c.aka||"") + (c.pref||"")).toLowerCase().includes(term))
-      : castles;
-
+    const filtered = term ? castles.filter(c => (c.name+(c.aka||"")+(c.pref||"")).toLowerCase().includes(term)) : castles;
     const positions: [number, number][] = [];
 
     filtered.forEach((castle) => {
       let lat: number, lng: number;
-      if (castle.lat && castle.lng) {
-        lat = castle.lat; lng = castle.lng;
-      } else {
+      if (castle.lat && castle.lng) { lat = castle.lat; lng = castle.lng; }
+      else {
         const coords = PREF_COORDS[castle.pref]; if (!coords) return;
         const h = stableHash(castle.id || castle.name);
         lat = coords[0] + (((h & 0xff) - 128) / 128) * 0.22;
         lng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
       }
-
       const { color, size, shape, border } = markerStyle(castle.rating || 5);
       const emoji = castle.recordType === "battlefield" ? "⚔️" : "🏯";
       const half = size / 2;
       const icon = L.divIcon({
-        html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:${shape};display:flex;align-items:center;justify-content:center;font-size:${size * 0.5}px;border:${border};box-shadow:0 2px 8px rgba(0,0,0,0.35);">${emoji}</div>`,
+        html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:${shape};display:flex;align-items:center;justify-content:center;font-size:${size*0.5}px;border:${border};box-shadow:0 2px 8px rgba(0,0,0,0.35);">${emoji}</div>`,
         className: "", iconSize: [size, size], iconAnchor: [half, half], popupAnchor: [0, -half - 2],
       });
-      const starsHtml = [1,2,3,4,5].map((n) =>
-        `<span style="color:${n <= (castle.rating||5) ? "#F59E0B" : "#e5e7eb"};font-size:13px">★</span>`
-      ).join("");
+      const starsHtml = [1,2,3,4,5].map((n) => `<span style="color:${n<=(castle.rating||5)?"#F59E0B":"#e5e7eb"};font-size:13px">★</span>`).join("");
       const marker = L.marker([lat, lng], { icon }).addTo(mapInstanceRef.current).bindPopup(`
         <div style="font-family:sans-serif;min-width:150px;padding:2px">
-          <div data-castle-id="${castle.id}" style="font-weight:900;font-size:14px;margin-bottom:3px;color:#B7410E;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">
-            ${castle.name}
-          </div>
-          ${castle.recordType === "battlefield" ? `<div style="font-size:10px;color:#7c6a56;font-weight:700;margin-bottom:2px">古戦場</div>` : ""}
-          ${castle.province ? `<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:2px">${castle.province}国</div>` : ""}
-          ${castle.pref ? `<div style="font-size:10px;color:#78716c;margin-bottom:4px">${castle.pref}</div>` : ""}
-          ${castle.visitDate ? `<div style="font-size:11px;color:#666;margin-bottom:4px">📅 ${castle.visitDate}</div>` : ""}
+          <div data-castle-id="${castle.id}" style="font-weight:900;font-size:14px;margin-bottom:3px;color:#B7410E;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">${castle.name}</div>
+          ${castle.recordType==="battlefield"?`<div style="font-size:10px;color:#7c6a56;font-weight:700;margin-bottom:2px">古戦場</div>`:""}
+          ${castle.province?`<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:2px">${castle.province}国</div>`:""}
+          ${castle.pref?`<div style="font-size:10px;color:#78716c;margin-bottom:4px">${castle.pref}</div>`:""}
+          ${castle.visitDate?`<div style="font-size:11px;color:#666;margin-bottom:4px">📅 ${castle.visitDate}</div>`:""}
           <div>${starsHtml}</div>
-          <div style="margin-top:6px;font-size:10px;color:#aaa;">城名をタップ → カード表示</div>
+          <div style="margin-top:8px;display:flex;gap:10px;align-items:center;">
+            <span style="font-size:10px;color:#aaa;">城名→カード表示</span>
+            <span data-edit-coord-id="${castle.id}" style="font-size:10px;color:#B7410E;cursor:pointer;text-decoration:underline;">位置修正</span>
+          </div>
         </div>`);
+      (marker as any)._castleId = castle.id;
       markersRef.current.push(marker);
       positions.push([lat, lng]);
     });
 
-    // ① 検索結果が1件 → その城にズーム＆ポップアップ表示
-    //   複数件 → 全件が収まるようにフィット
-    if (term && positions.length === 1) {
-      mapInstanceRef.current.setView(positions[0], 13, { animate: true });
-      markersRef.current[0]?.openPopup();
-    } else if (term && positions.length > 1) {
-      mapInstanceRef.current.fitBounds(positions, { padding: [40, 40], maxZoom: 12 });
-    }
+    if (term && positions.length === 1) { mapInstanceRef.current.setView(positions[0], 13, { animate: true }); markersRef.current[0]?.openPopup(); }
+    else if (term && positions.length > 1) { mapInstanceRef.current.fitBounds(positions, { padding: [40, 40], maxZoom: 12 }); }
   }, [castles, mapReady, mapSearch]);
+
+  // 手動座標編集マップ
+  useEffect(() => {
+    if (!editingCoord) return;
+    const L = (window as any).L;
+    setTimeout(() => {
+      if (!coordMapRef.current || coordMapInstanceRef.current) return;
+      const initLat = coordLatLng?.lat ?? 35.180;
+      const initLng = coordLatLng?.lng ?? 136.907;
+      const cmap = L.map(coordMapRef.current).setView([initLat, initLng], 14);
+      L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
+        attribution: '© 国土地理院', maxZoom: 18,
+      }).addTo(cmap);
+      const marker = L.marker([initLat, initLng], { draggable: true }).addTo(cmap);
+      marker.on('dragend', () => { const pos = marker.getLatLng(); setCoordLatLng({ lat: pos.lat, lng: pos.lng }); });
+      cmap.on('click', (e: any) => { marker.setLatLng(e.latlng); setCoordLatLng({ lat: e.latlng.lat, lng: e.latlng.lng }); });
+      coordMapInstanceRef.current = cmap;
+    }, 100);
+    return () => { if (coordMapInstanceRef.current) { coordMapInstanceRef.current.remove(); coordMapInstanceRef.current = null; } };
+  }, [editingCoord]);
 
   const validCount = castles.filter((c) => (c.lat && c.lng) || PREF_COORDS[c.pref]).length;
   const filteredCount = mapSearch.trim()
@@ -394,45 +431,33 @@ const MapPage = ({ castles, onCastleSelect }: { castles: any[]; onCastleSelect: 
       <div ref={mapRef} className="w-full h-full" />
       {mapReady && (
         <>
-          {/* ① 検索バー */}
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[90%] max-w-sm z-[1000]">
+          {/* ③ 検索バー：幅を縮小 */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000]" style={{ width: "50%", minWidth: "140px", maxWidth: "260px" }}>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={15} />
-              <input
-                ref={mapSearchRef}
-                type="text"
-                placeholder="城名・都道府県で絞り込み..."
-                className="w-full pl-9 pr-8 py-2.5 bg-white/95 backdrop-blur-sm rounded-2xl text-sm border border-stone-200 shadow-md outline-none focus:border-amber-300"
-                value={mapSearch}
-                onChange={(e) => setMapSearch(e.target.value)}
-              />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
+              <input ref={mapSearchRef} type="text" placeholder="城名・県名..."
+                className="w-full pl-7 pr-6 py-2 bg-white/95 backdrop-blur-sm rounded-xl text-xs border border-stone-200 shadow-md outline-none focus:border-amber-300"
+                value={mapSearch} onChange={(e) => setMapSearch(e.target.value)} />
               {mapSearch && (
-                <button onClick={() => setMapSearch("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700">
-                  <X size={14} />
+                <button onClick={() => setMapSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700">
+                  <X size={12} />
                 </button>
               )}
             </div>
             {mapSearch && (
-              <div className="mt-1 text-center text-[10px] font-black text-stone-500 bg-white/90 rounded-lg py-1 shadow">
-                {filteredCount} 件ヒット
-              </div>
+              <div className="mt-1 text-center text-[10px] font-black text-stone-500 bg-white/90 rounded-lg py-0.5 shadow">{filteredCount} 件</div>
             )}
           </div>
-
-          {/* 件数バッジ */}
-          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 z-[1000]">
-            <span className="text-[11px] font-black text-stone-600">🏯 {validCount} 件</span>
+          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-2.5 py-1.5 shadow-md border border-stone-200 z-[1000]">
+            <span className="text-[10px] font-black text-stone-600">🏯 {validCount}</span>
           </div>
-
-          {/* ② 凡例（形・色・サイズで区別） */}
           <div className="absolute bottom-16 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[1000]">
             <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-2">評価</p>
             {[
-              { color: "#B7410E", size: 18, shape: "4px",  label: "★★★★★" },
-              { color: "#d97706", size: 15, shape: "50%",  label: "★★★★" },
-              { color: "#7c6a56", size: 12, shape: "50%",  label: "★★★" },
-              { color: "#9ca3af", size: 10, shape: "50%",  label: "★★以下" },
+              { color: "#B7410E", size: 18, shape: "4px", label: "★★★★★" },
+              { color: "#d97706", size: 15, shape: "50%", label: "★★★★" },
+              { color: "#7c6a56", size: 12, shape: "50%", label: "★★★" },
+              { color: "#9ca3af", size: 10, shape: "50%", label: "★★以下" },
             ].map(({ color, size, shape, label }) => (
               <div key={label} className="flex items-center gap-2 mb-1.5 last:mb-0">
                 <div style={{ background: color, width: size, height: size, borderRadius: shape, border: "2px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)", flexShrink: 0 }} />
@@ -442,9 +467,41 @@ const MapPage = ({ castles, onCastleSelect }: { castles: any[]; onCastleSelect: 
           </div>
         </>
       )}
+      {/* 手動座標編集モーダル */}
+      {editingCoord && (
+        <div className="absolute inset-0 bg-stone-900/70 z-[2000] flex items-end md:items-center justify-center">
+          <div className="bg-white w-full max-w-lg rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col" style={{ maxHeight: "90vh" }}>
+            <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center shrink-0">
+              <div>
+                <h3 className="font-black text-stone-900">{editingCoord.name}</h3>
+                <p className="text-[10px] text-stone-400 mt-0.5">マーカーをドラッグ、または地図をタップして位置を指定</p>
+              </div>
+              <button onClick={() => { setEditingCoord(null); setCoordLatLng(null); }}
+                className="p-2 text-stone-300 hover:text-stone-800 bg-stone-50 rounded-full"><X size={20} /></button>
+            </div>
+            <div ref={coordMapRef} style={{ height: "280px", flexShrink: 0 }} />
+            <div className="p-4 space-y-3 shrink-0">
+              {coordLatLng && (
+                <p className="text-[11px] text-stone-400 text-center font-mono">
+                  {coordLatLng.lat.toFixed(6)}, {coordLatLng.lng.toFixed(6)}
+                </p>
+              )}
+              <button onClick={async () => {
+                if (!coordLatLng) return;
+                const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingCoord.id);
+                await setDoc(ref, { ...editingCoord, lat: coordLatLng.lat, lng: coordLatLng.lng, updatedAt: new Date().toISOString() });
+                setEditingCoord(null); setCoordLatLng(null);
+              }} className="w-full bg-[#B7410E] text-white py-3 rounded-[18px] font-black text-sm hover:bg-[#9a3509] transition-all">
+                この位置で保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
 
 // ─── ウィッシュリストページ ─────────────────────────────
 
