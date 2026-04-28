@@ -326,10 +326,15 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
     return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
   }, []);
 
-  // 表示切替時にLeafletのサイズを再計算
+  // 表示切替時にLeafletのサイズを再計算、フォーカスなしなら名古屋に戻す
   useEffect(() => {
     if (isVisible && mapInstanceRef.current) {
-      setTimeout(() => mapInstanceRef.current.invalidateSize(), 50);
+      setTimeout(() => {
+        mapInstanceRef.current.invalidateSize();
+        if (!focusCastleId && !pendingFocusRef.current) {
+          mapInstanceRef.current.setView([35.180, 136.907], 10, { animate: false });
+        }
+      }, 50);
     }
   }, [isVisible]);
   const pendingFocusRef = useRef<string | null>(null);
@@ -502,9 +507,6 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
             {mapSearch && (
               <div className="mt-1 text-center text-[10px] font-black text-stone-500 bg-white/90 rounded-lg py-0.5 shadow">{filteredCount} 件</div>
             )}
-          </div>
-          <div className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm rounded-xl px-2.5 py-1.5 shadow-md border border-stone-200 z-[1000]">
-            <span className="text-[10px] font-black text-stone-600">🏯 {validCount}</span>
           </div>
           <div className="absolute bottom-16 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[1000]">
             <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-2">評価</p>
