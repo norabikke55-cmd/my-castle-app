@@ -470,7 +470,7 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
       {/* 手動座標編集モーダル */}
       {editingCoord && (
         <div className="absolute inset-0 bg-stone-900/70 z-[2000] flex items-end md:items-center justify-center">
-          <div className="bg-white w-full max-w-lg rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col" style={{ maxHeight: "90vh" }}>
+          <div className="bg-white w-full max-w-lg rounded-t-[32px] md:rounded-[32px] shadow-2xl flex flex-col" style={{ maxHeight: "92vh" }}>
             <div className="px-6 py-4 border-b border-stone-100 flex justify-between items-center shrink-0">
               <div>
                 <h3 className="font-black text-stone-900">{editingCoord.name}</h3>
@@ -479,7 +479,7 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
               <button onClick={() => { setEditingCoord(null); setCoordLatLng(null); }}
                 className="p-2 text-stone-300 hover:text-stone-800 bg-stone-50 rounded-full"><X size={20} /></button>
             </div>
-            <div ref={coordMapRef} style={{ height: "280px", flexShrink: 0 }} />
+            <div ref={coordMapRef} style={{ flexGrow: 1, minHeight: "420px" }} />
             <div className="p-4 space-y-3 shrink-0">
               {coordLatLng && (
                 <p className="text-[11px] text-stone-400 text-center font-mono">
@@ -1068,6 +1068,11 @@ export default function App() {
                     </div>
 
                     <div className="flex justify-end gap-1 mt-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => { setFocusCastleId(castle.id); setCurrentPage("map"); }}
+                        className="p-1.5 bg-stone-50 text-stone-400 hover:text-amber-600 hover:bg-amber-50 rounded-full transition-all"
+                        title="マップで表示">
+                        <Map size={14} />
+                      </button>
                       <button onClick={() => openForm(castle)}
                         className="p-1.5 bg-stone-50 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-full transition-all">
                         <Edit3 size={14} />
