@@ -326,42 +326,68 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
     return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
   }, []);
 
-  // ② カードからフォーカス
+  // ② カードからフォーカス（focusCastleId が変化したら実行）
   const pendingFocusRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (focusCastleId) pendingFocusRef.current = focusCastleId;
-  }, [focusCastleId]);
+    if (!focusCastleId) return;
+    pendingFocusRef.current = focusCastleId;
+    if (!mapReady || !mapInstanceRef.current) return;
 
-  // マーカー描画完了後にフォーカスを実行
-  const doFocusAfterMarkers = async () => {
-    const id = pendingFocusRef.current;
-    if (!id || !mapInstanceRef.current) return;
+    const id = focusCastleId;
     pendingFocusRef.current = null;
 
     const castle = castles.find(c => c.id === id);
     if (!castle) return;
 
-    let lat: number | null = castle.lat ?? null;
-    let lng: number | null = castle.lng ?? null;
+    (async () => {
+      let lat: number | null = castle.lat ?? null;
+      let lng: number | null = castle.lng ?? null;
+      if (!lat || !lng) {
+        const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+        if (coords) { lat = coords.lat; lng = coords.lng; }
+      }
+      if (lat && lng) {
+        mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
+        setTimeout(() => {
+          const marker = markersRef.current.find(m => (m as any)._castleId === id);
+          if (marker) marker.openPopup();
+        }, 600);
+      } else {
+        const coords = PREF_COORDS[castle.pref];
+        if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
+      }
+      onFocusHandled?.();
+    })();
+  }, [focusCastleId]);
 
-    if (!lat || !lng) {
-      const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
-      if (coords) { lat = coords.lat; lng = coords.lng; }
-    }
-
-    if (lat && lng) {
-      mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
-      setTimeout(() => {
-        const marker = markersRef.current.find(m => (m as any)._castleId === id);
-        if (marker) marker.openPopup();
-      }, 500);
-    } else {
-      const coords = PREF_COORDS[castle.pref];
-      if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
-    }
-    onFocusHandled?.();
-  };
+  // mapReady になった時点でpendingがあれば実行
+  useEffect(() => {
+    if (!mapReady || !pendingFocusRef.current || !mapInstanceRef.current) return;
+    const id = pendingFocusRef.current;
+    pendingFocusRef.current = null;
+    const castle = castles.find(c => c.id === id);
+    if (!castle) return;
+    (async () => {
+      let lat: number | null = castle.lat ?? null;
+      let lng: number | null = castle.lng ?? null;
+      if (!lat || !lng) {
+        const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+        if (coords) { lat = coords.lat; lng = coords.lng; }
+      }
+      if (lat && lng) {
+        mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
+        setTimeout(() => {
+          const marker = markersRef.current.find(m => (m as any)._castleId === id);
+          if (marker) marker.openPopup();
+        }, 600);
+      } else {
+        const coords = PREF_COORDS[castle.pref];
+        if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
+      }
+      onFocusHandled?.();
+    })();
+  }, [mapReady]);
 
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
@@ -417,9 +443,6 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
 
     if (term && positions.length === 1) { mapInstanceRef.current.setView(positions[0], 13, { animate: true }); markersRef.current[0]?.openPopup(); }
     else if (term && positions.length > 1) { mapInstanceRef.current.fitBounds(positions, { padding: [40, 40], maxZoom: 12 }); }
-
-    // フォーカス待ちがあれば実行
-    doFocusAfterMarkers();
   }, [castles, mapReady, mapSearch]);
 
   // 手動座標編集マップ
@@ -1120,16 +1143,19 @@ export default function App() {
         )}
 
         {currentPage === "prefecture" && <PrefecturePage castles={castles} />}
-        {currentPage === "map" && <MapPage castles={castles} onCastleSelect={(castle) => {
-          setCurrentPage("list");
-          setRecordTab(castle.recordType || "castle");
-          setSearchTerm("");
-          setHighlightId(castle.id);
-          setTimeout(() => {
-            const el = document.getElementById(`castle-card-${castle.id}`);
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-          }, 300);
-        }} />}
+        {/* マップは常時レンダリング（ページ切替でリセットされないよう） */}
+        <div style={{ display: currentPage === "map" ? "block" : "none" }}>
+          <MapPage castles={castles} onCastleSelect={(castle) => {
+            setCurrentPage("list");
+            setRecordTab(castle.recordType || "castle");
+            setSearchTerm("");
+            setHighlightId(castle.id);
+            setTimeout(() => {
+              const el = document.getElementById(`castle-card-${castle.id}`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 300);
+          }} focusCastleId={focusCastleId} onFocusHandled={() => setFocusCastleId(null)} />
+        </div>
         {currentPage === "wishlist" && (
           <WishlistPage
             wishes={wishes}
