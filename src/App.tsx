@@ -332,6 +332,7 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       setTimeout(() => {
         mapInstanceRef.current.invalidateSize();
         if (!focusCastleId && !pendingFocusRef.current) {
+          mapInstanceRef.current.closePopup();
           mapInstanceRef.current.setView([35.180, 136.907], 10, { animate: false });
         }
       }, 50);
