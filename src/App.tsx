@@ -326,18 +326,46 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
     return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
   }, []);
 
-  // ② カードからフォーカス
+  // ② カードからフォーカス（マップ準備完了後に実行）
+  const pendingFocusRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (!mapReady || !focusCastleId || !mapInstanceRef.current) return;
-    const castle = castles.find(c => c.id === focusCastleId);
+    if (focusCastleId) pendingFocusRef.current = focusCastleId;
+  }, [focusCastleId]);
+
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return;
+    const id = pendingFocusRef.current;
+    if (!id) return;
+    pendingFocusRef.current = null;
+    const castle = castles.find(c => c.id === id);
     if (!castle) return;
-    if (castle.lat && castle.lng) {
-      mapInstanceRef.current.setView([castle.lat, castle.lng], 14, { animate: true });
-      const marker = markersRef.current.find(m => (m as any)._castleId === focusCastleId);
-      if (marker) marker.openPopup();
-    }
-    onFocusHandled?.();
-  }, [focusCastleId, mapReady]);
+
+    const doFocus = async () => {
+      let lat: number | null = castle.lat ?? null;
+      let lng: number | null = castle.lng ?? null;
+
+      // 保存済み座標がなければ住所・城名から取得
+      if (!lat || !lng) {
+        const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+        if (coords) { lat = coords.lat; lng = coords.lng; }
+      }
+
+      if (lat && lng) {
+        mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
+        setTimeout(() => {
+          const marker = markersRef.current.find(m => (m as any)._castleId === id);
+          if (marker) marker.openPopup();
+        }, 400);
+      } else {
+        // 最終フォールバック：都道府県中心
+        const coords = PREF_COORDS[castle.pref];
+        if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
+      }
+      onFocusHandled?.();
+    };
+    doFocus();
+  }, [mapReady, castles]);
 
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
