@@ -289,9 +289,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
       if (!mapRef.current || mapInstanceRef.current || !L) return;
       // ④ 名古屋中心・ズーム10
       const map = L.map(mapRef.current, { zoomControl: true }).setView([35.180, 136.907], 10);
-      // 国土地理院タイル
-      L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 18,
       }).addTo(map);
       mapInstanceRef.current = map;
@@ -454,8 +453,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
       const initLat = coordLatLng?.lat ?? 35.180;
       const initLng = coordLatLng?.lng ?? 136.907;
       const cmap = L.map(coordMapRef.current).setView([initLat, initLng], 14);
-      L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
-        attribution: '© 国土地理院', maxZoom: 18,
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© OpenStreetMap', maxZoom: 18,
       }).addTo(cmap);
       const marker = L.marker([initLat, initLng], { draggable: true }).addTo(cmap);
       marker.on('dragend', () => { const pos = marker.getLatLng(); setCoordLatLng({ lat: pos.lat, lng: pos.lng }); });
