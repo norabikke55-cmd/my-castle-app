@@ -626,7 +626,6 @@ export default function App() {
   const [recordTab, setRecordTab] = useState<RecordType>("castle");
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" }>({ key: "visitDate", direction: "desc" });
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
-  const [highlightId, setHighlightId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -649,6 +648,8 @@ export default function App() {
   const [photoError, setPhotoError] = useState("");
   const [photoLoading, setPhotoLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [focusCastleId, setFocusCastleId] = useState<string | null>(null);
 
   // ─── Firestore 読み込み（④ キャッシュ優先：初回もキャッシュから即表示） ──
   useEffect(() => {
