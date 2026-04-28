@@ -106,11 +106,18 @@ const resolveCoords = async (name: string, address: string, pref: string): Promi
 
   await new Promise((r) => setTimeout(r, 1000));
 
-  // 2. 住所があれば住所でNominatim検索
+  // 2. 住所があれば住所のみでNominatim検索（都道府県は含めず住所そのままで検索）
   if (address) {
     const fromAddr = await fetchCoordsFromNominatim(address);
     if (fromAddr && isInJapan(fromAddr.lat, fromAddr.lng)) return fromAddr;
     await new Promise((r) => setTimeout(r, 1000));
+
+    // 住所が失敗した場合、都道府県を先頭に付けて再試行
+    if (pref) {
+      const fromAddrWithPref = await fetchCoordsFromNominatim(`${pref}${address}`);
+      if (fromAddrWithPref && isInJapan(fromAddrWithPref.lat, fromAddrWithPref.lng)) return fromAddrWithPref;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
   }
 
   // 3. 城名 + 都道府県でNominatim検索
@@ -301,7 +308,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         const nameEl = el.querySelector('[data-castle-id]');
         if (nameEl) {
           const castleId = nameEl.getAttribute('data-castle-id');
-          nameEl.addEventListener('click', () => {
+          nameEl.addEventListener('click', (ev: Event) => {
+            ev.stopPropagation();
             const found = (map as any)._castlesRef?.find((c: any) => c.id === castleId);
             if (found) onCastleSelect(found);
           });
@@ -309,7 +317,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         const editEl = el.querySelector('[data-edit-coord-id]');
         if (editEl) {
           const editId = editEl.getAttribute('data-edit-coord-id');
-          editEl.addEventListener('click', () => {
+          editEl.addEventListener('click', (ev: Event) => {
+            ev.stopPropagation();
             const found = (map as any)._castlesRef?.find((c: any) => c.id === editId);
             if (found) { map.closePopup(); setEditingCoord(found); setCoordLatLng(found.lat && found.lng ? { lat: found.lat, lng: found.lng } : null); }
           });
@@ -547,7 +556,7 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
               <button onClick={async () => {
                 if (!coordLatLng) return;
                 const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingCoord.id);
-                await setDoc(ref, { ...editingCoord, lat: coordLatLng.lat, lng: coordLatLng.lng, updatedAt: new Date().toISOString() });
+                await setDoc(ref, { ...editingCoord, lat: coordLatLng.lat, lng: coordLatLng.lng, manualCoord: true, updatedAt: new Date().toISOString() });
                 setEditingCoord(null); setCoordLatLng(null);
               }} className="w-full bg-[#B7410E] text-white py-3 rounded-[18px] font-black text-sm hover:bg-[#9a3509] transition-all">
                 この位置で保存
@@ -692,7 +701,8 @@ export default function App() {
     name: "", aka: "", pref: "", province: "", address: "",
     visitDate: "", battleYear: "", rating: 5, memo: "", photo: "",
     recordType: "castle" as RecordType,
-    lat: null as number | null, lng: null as number | null
+    lat: null as number | null, lng: null as number | null,
+    manualCoord: false as boolean
   };
   // ③ 行きたいリストに住所追加
   const emptyWishForm = {
@@ -794,8 +804,12 @@ export default function App() {
         ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingId)
         : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
 
+      // 手動修正済みの座標は上書きしない
+      const isManual = formData.manualCoord === true;
+
       // 新規登録：常に座標取得
       // 編集時：名前か住所が変わった場合、または座標が日本国外の場合に再取得
+      // ただし手動修正済みの場合はスキップ
       const existing = editingId ? castles.find(c => c.id === editingId) : null;
       const nameChanged = existing && existing.name !== formData.name;
       const addressChanged = existing && existing.address !== formData.address;
@@ -803,7 +817,7 @@ export default function App() {
         ? !isInJapan(formData.lat, formData.lng)
         : false;
       const noCoords = !formData.lat || !formData.lng;
-      const needsGeocode = !editingId || noCoords || nameChanged || addressChanged || hasInvalidCoords;
+      const needsGeocode = !isManual && (!editingId || noCoords || nameChanged || addressChanged || hasInvalidCoords);
 
       let lat = formData.lat;
       let lng = formData.lng;
