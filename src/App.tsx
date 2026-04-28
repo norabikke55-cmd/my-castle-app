@@ -260,11 +260,12 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
 
 // ─── マップページ ───────────────────────────────────────
 
-const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
+const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVisible }: {
   castles: any[];
   onCastleSelect: (castle: any) => void;
   focusCastleId?: string | null;
   onFocusHandled?: () => void;
+  isVisible?: boolean;
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -289,9 +290,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
       if (!mapRef.current || mapInstanceRef.current || !L) return;
       // ④ 名古屋中心・ズーム10
       const map = L.map(mapRef.current, { zoomControl: true }).setView([35.180, 136.907], 10);
-      // 国土地理院タイル
-      L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>',
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 18,
       }).addTo(map);
       mapInstanceRef.current = map;
@@ -326,18 +326,73 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
     return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
   }, []);
 
-  // ② カードからフォーカス
+  // 表示切替時にLeafletのサイズを再計算
   useEffect(() => {
-    if (!mapReady || !focusCastleId || !mapInstanceRef.current) return;
-    const castle = castles.find(c => c.id === focusCastleId);
-    if (!castle) return;
-    if (castle.lat && castle.lng) {
-      mapInstanceRef.current.setView([castle.lat, castle.lng], 14, { animate: true });
-      const marker = markersRef.current.find(m => (m as any)._castleId === focusCastleId);
-      if (marker) marker.openPopup();
+    if (isVisible && mapInstanceRef.current) {
+      setTimeout(() => mapInstanceRef.current.invalidateSize(), 50);
     }
-    onFocusHandled?.();
-  }, [focusCastleId, mapReady]);
+  }, [isVisible]);
+  const pendingFocusRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!focusCastleId) return;
+    pendingFocusRef.current = focusCastleId;
+    if (!mapReady || !mapInstanceRef.current) return;
+
+    const id = focusCastleId;
+    pendingFocusRef.current = null;
+
+    const castle = castles.find(c => c.id === id);
+    if (!castle) return;
+
+    (async () => {
+      let lat: number | null = castle.lat ?? null;
+      let lng: number | null = castle.lng ?? null;
+      if (!lat || !lng) {
+        const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+        if (coords) { lat = coords.lat; lng = coords.lng; }
+      }
+      if (lat && lng) {
+        mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
+        setTimeout(() => {
+          const marker = markersRef.current.find(m => (m as any)._castleId === id);
+          if (marker) marker.openPopup();
+        }, 600);
+      } else {
+        const coords = PREF_COORDS[castle.pref];
+        if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
+      }
+      onFocusHandled?.();
+    })();
+  }, [focusCastleId]);
+
+  // mapReady になった時点でpendingがあれば実行
+  useEffect(() => {
+    if (!mapReady || !pendingFocusRef.current || !mapInstanceRef.current) return;
+    const id = pendingFocusRef.current;
+    pendingFocusRef.current = null;
+    const castle = castles.find(c => c.id === id);
+    if (!castle) return;
+    (async () => {
+      let lat: number | null = castle.lat ?? null;
+      let lng: number | null = castle.lng ?? null;
+      if (!lat || !lng) {
+        const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+        if (coords) { lat = coords.lat; lng = coords.lng; }
+      }
+      if (lat && lng) {
+        mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
+        setTimeout(() => {
+          const marker = markersRef.current.find(m => (m as any)._castleId === id);
+          if (marker) marker.openPopup();
+        }, 600);
+      } else {
+        const coords = PREF_COORDS[castle.pref];
+        if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
+      }
+      onFocusHandled?.();
+    })();
+  }, [mapReady]);
 
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
@@ -404,8 +459,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
       const initLat = coordLatLng?.lat ?? 35.180;
       const initLng = coordLatLng?.lng ?? 136.907;
       const cmap = L.map(coordMapRef.current).setView([initLat, initLng], 14);
-      L.tileLayer("https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png", {
-        attribution: '© 国土地理院', maxZoom: 18,
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        attribution: '© OpenStreetMap', maxZoom: 18,
       }).addTo(cmap);
       const marker = L.marker([initLat, initLng], { draggable: true }).addTo(cmap);
       marker.on('dragend', () => { const pos = marker.getLatLng(); setCoordLatLng({ lat: pos.lat, lng: pos.lng }); });
@@ -626,7 +681,6 @@ export default function App() {
   const [recordTab, setRecordTab] = useState<RecordType>("castle");
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" }>({ key: "visitDate", direction: "desc" });
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
-  const [highlightId, setHighlightId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -649,6 +703,8 @@ export default function App() {
   const [photoError, setPhotoError] = useState("");
   const [photoLoading, setPhotoLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const [focusCastleId, setFocusCastleId] = useState<string | null>(null);
 
   // ─── Firestore 読み込み（④ キャッシュ優先：初回もキャッシュから即表示） ──
   useEffect(() => {
@@ -1092,16 +1148,20 @@ export default function App() {
         )}
 
         {currentPage === "prefecture" && <PrefecturePage castles={castles} />}
-        {currentPage === "map" && <MapPage castles={castles} onCastleSelect={(castle) => {
-          setCurrentPage("list");
-          setRecordTab(castle.recordType || "castle");
-          setSearchTerm("");
-          setHighlightId(castle.id);
-          setTimeout(() => {
-            const el = document.getElementById(`castle-card-${castle.id}`);
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-          }, 300);
-        }} />}
+        {/* マップは常時レンダリング（ページ切替でリセットされないよう） */}
+        <div style={{ display: currentPage === "map" ? "block" : "none" }}>
+          <MapPage castles={castles} onCastleSelect={(castle) => {
+            setCurrentPage("list");
+            setRecordTab(castle.recordType || "castle");
+            setSearchTerm("");
+            setHighlightId(castle.id);
+            setTimeout(() => {
+              const el = document.getElementById(`castle-card-${castle.id}`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 300);
+          }} focusCastleId={focusCastleId} onFocusHandled={() => setFocusCastleId(null)}
+          isVisible={currentPage === "map"} />
+        </div>
         {currentPage === "wishlist" && (
           <WishlistPage
             wishes={wishes}
