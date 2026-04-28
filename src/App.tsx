@@ -260,11 +260,12 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
 
 // ─── マップページ ───────────────────────────────────────
 
-const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
+const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVisible }: {
   castles: any[];
   onCastleSelect: (castle: any) => void;
   focusCastleId?: string | null;
   onFocusHandled?: () => void;
+  isVisible?: boolean;
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -325,7 +326,12 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled }: {
     return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
   }, []);
 
-  // ② カードからフォーカス（focusCastleId が変化したら実行）
+  // 表示切替時にLeafletのサイズを再計算
+  useEffect(() => {
+    if (isVisible && mapInstanceRef.current) {
+      setTimeout(() => mapInstanceRef.current.invalidateSize(), 50);
+    }
+  }, [isVisible]);
   const pendingFocusRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1153,7 +1159,8 @@ export default function App() {
               const el = document.getElementById(`castle-card-${castle.id}`);
               if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 300);
-          }} focusCastleId={focusCastleId} onFocusHandled={() => setFocusCastleId(null)} />
+          }} focusCastleId={focusCastleId} onFocusHandled={() => setFocusCastleId(null)}
+          isVisible={currentPage === "map"} />
         </div>
         {currentPage === "wishlist" && (
           <WishlistPage
