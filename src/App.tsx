@@ -351,10 +351,23 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         fullscreenControl: false,
         mapTypeControlOptions: {
           mapTypeIds: ["roadmap", "satellite"],
-          position: google.maps.ControlPosition.TOP_RIGHT,
+          position: google.maps.ControlPosition.BOTTOM_LEFT,
           style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
         },
       });
+
+      // 地図タイプボタンの文字を小さくするCSS注入
+      const style = document.createElement("style");
+      style.textContent = `
+        .gm-style-mtc button { font-size: 11px !important; padding: 2px 6px !important; height: auto !important; }
+        .gm-style .gm-style-iw-c { padding: 8px !important; }
+        .gm-style .gm-style-iw-d { overflow: hidden !important; padding: 0 !important; }
+        .gm-style .gm-style-iw-t::after { display: none !important; }
+        .gm-style-iw-ch { padding-top: 0 !important; }
+        .gm-style-iw button.gm-ui-hover-effect { top: 0 !important; right: 0 !important; width: 24px !important; height: 24px !important; }
+        .gm-style-iw button.gm-ui-hover-effect span { width: 14px !important; height: 14px !important; }
+      `;
+      document.head.appendChild(style);
       mapInstanceRef.current = map;
       infoWindowRef.current = new google.maps.InfoWindow();
       setMapReady(true);
