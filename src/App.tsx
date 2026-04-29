@@ -94,36 +94,83 @@ const fetchCoordsFromNominatim = async (query: string): Promise<{ lat: number; l
   } catch { return null; }
 };
 
+// 都道府県ごとの緯度経度の大まかな範囲（lat_min, lat_max, lng_min, lng_max）
+const PREF_BOUNDS: Record<string, [number, number, number, number]> = {
+  "北海道":[41.3,45.6,139.3,145.9],"青森県":[40.1,41.6,139.8,141.7],"岩手県":[38.7,40.5,140.6,142.1],
+  "宮城県":[37.7,39.0,140.2,141.7],"秋田県":[38.9,40.5,139.6,141.1],"山形県":[37.7,39.1,139.6,140.9],
+  "福島県":[36.8,37.9,136.8,141.1],"茨城県":[35.7,36.9,139.7,140.9],"栃木県":[36.2,37.2,139.3,140.4],
+  "群馬県":[35.9,37.1,138.4,139.7],"埼玉県":[35.7,36.3,138.7,139.9],"千葉県":[35.0,35.9,139.7,140.9],
+  "東京都":[35.5,35.9,138.9,139.9],"神奈川県":[35.1,35.7,139.0,139.8],"新潟県":[36.7,38.7,137.6,139.9],
+  "富山県":[36.4,36.9,136.8,137.7],"石川県":[36.1,37.9,136.3,137.4],"福井県":[35.4,36.3,135.5,136.7],
+  "山梨県":[35.2,35.9,138.2,139.0],"長野県":[35.2,37.0,136.9,138.8],"岐阜県":[35.1,36.6,136.3,137.7],
+  "静岡県":[34.6,35.6,137.5,139.2],"愛知県":[34.6,35.4,136.7,137.8],"三重県":[33.7,35.2,135.9,136.9],
+  "滋賀県":[34.8,35.7,135.7,136.4],"京都府":[34.7,35.8,135.0,135.9],"大阪府":[34.3,34.9,135.1,135.8],
+  "兵庫県":[34.1,35.7,134.2,135.5],"奈良県":[33.9,34.8,135.6,136.3],"和歌山県":[33.4,34.4,135.1,136.0],
+  "鳥取県":[35.0,35.6,133.2,134.6],"島根県":[34.3,35.8,131.7,133.5],"岡山県":[34.3,35.3,133.2,134.5],
+  "広島県":[33.9,35.2,132.0,133.4],"山口県":[33.7,34.8,130.8,132.1],"徳島県":[33.5,34.3,133.7,134.8],
+  "香川県":[34.1,34.5,133.5,134.4],"愛媛県":[32.9,34.2,131.9,133.7],"高知県":[32.7,33.9,132.5,134.3],
+  "福岡県":[33.1,34.2,130.0,131.2],"佐賀県":[33.0,33.6,129.7,130.6],"長崎県":[32.5,34.7,128.6,130.3],
+  "熊本県":[32.0,33.2,130.1,131.4],"大分県":[32.7,33.7,130.7,132.1],"宮崎県":[31.4,32.9,130.7,132.1],
+  "鹿児島県":[30.0,32.3,129.3,131.3],"沖縄県":[24.0,27.1,122.9,131.4],
+};
+
+// 座標が指定都道府県の範囲内にあるかチェック
+const isInPref = (lat: number, lng: number, pref: string): boolean => {
+  const bounds = PREF_BOUNDS[pref];
+  if (!bounds) return true; // 範囲データなければスキップ
+  return lat >= bounds[0] && lat <= bounds[1] && lng >= bounds[2] && lng <= bounds[3];
+};
+
 // 日本国内の座標かチェック（おおよその範囲）
 const isInJapan = (lat: number, lng: number): boolean =>
   lat >= 24 && lat <= 46 && lng >= 122 && lng <= 154;
 
-// 座標取得のメイン関数（Wikipedia → 住所 → 城名の順で試みる）
+// 住所を末尾から段階的に短くしてリストを生成
+const shortenAddress = (address: string): string[] => {
+  const result: string[] = [];
+  // 区切り文字（市・区・町・村・字・大字・丁・番など）で分割して段階的に短縮
+  const separators = /(?<=市|区|町|村|字|大字|丁目|番町|条)/g;
+  const parts = address.split(separators);
+  for (let i = parts.length; i >= 1; i--) {
+    const s = parts.slice(0, i).join("");
+    if (s && s !== address) result.push(s);
+  }
+  return result;
+};
+
+// 座標取得のメイン関数（Wikipedia → 住所段階的短縮 → 城名の順で試みる）
 const resolveCoords = async (name: string, address: string, pref: string): Promise<{ lat: number; lng: number } | null> => {
+  // 座標が都道府県範囲内かチェックする関数
+  const valid = (c: { lat: number; lng: number } | null) =>
+    c && isInJapan(c.lat, c.lng) && (pref ? isInPref(c.lat, c.lng, pref) : true);
+
   // 1. Wikipedia から取得
   const fromWiki = await fetchCoordsFromWikipedia(name);
-  if (fromWiki && isInJapan(fromWiki.lat, fromWiki.lng)) return fromWiki;
+  if (valid(fromWiki)) return fromWiki!;
 
   await new Promise((r) => setTimeout(r, 1000));
 
-  // 2. 住所があれば住所のみでNominatim検索（都道府県は含めず住所そのままで検索）
+  // 2. 住所で段階的に検索（フル住所 → 末尾を削って短縮 → 都道府県のみ）
   if (address) {
+    // フル住所をまず試す
     const fromAddr = await fetchCoordsFromNominatim(address);
-    if (fromAddr && isInJapan(fromAddr.lat, fromAddr.lng)) return fromAddr;
+    if (valid(fromAddr)) return fromAddr!;
     await new Promise((r) => setTimeout(r, 1000));
 
-    // 住所が失敗した場合、都道府県を先頭に付けて再試行
-    if (pref) {
-      const fromAddrWithPref = await fetchCoordsFromNominatim(`${pref}${address}`);
-      if (fromAddrWithPref && isInJapan(fromAddrWithPref.lat, fromAddrWithPref.lng)) return fromAddrWithPref;
-      await new Promise((r) => setTimeout(r, 1000));
+    // 末尾から段階的に短縮して検索
+    const shortened = shortenAddress(address);
+    for (const shortAddr of shortened) {
+      const fromShort = await fetchCoordsFromNominatim(shortAddr);
+      if (valid(fromShort)) return fromShort!;
+      await new Promise((r) => setTimeout(r, 800));
     }
   }
 
-  // 3. 城名 + 都道府県でNominatim検索
-  const query = pref ? `${name} ${pref}` : name;
-  const fromName = await fetchCoordsFromNominatim(query);
-  if (fromName && isInJapan(fromName.lat, fromName.lng)) return fromName;
+  // 3. 都道府県のみで検索（最終フォールバック）
+  if (pref) {
+    const fromPref = await fetchCoordsFromNominatim(pref);
+    if (valid(fromPref)) return fromPref!;
+  }
 
   return null;
 };
