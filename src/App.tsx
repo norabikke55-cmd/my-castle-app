@@ -807,17 +807,8 @@ export default function App() {
       // 手動修正済みの座標は上書きしない
       const isManual = formData.manualCoord === true;
 
-      // 新規登録：常に座標取得
-      // 編集時：名前か住所が変わった場合、または座標が日本国外の場合に再取得
-      // ただし手動修正済みの場合はスキップ
-      const existing = editingId ? castles.find(c => c.id === editingId) : null;
-      const nameChanged = existing && existing.name !== formData.name;
-      const addressChanged = existing && existing.address !== formData.address;
-      const hasInvalidCoords = formData.lat && formData.lng
-        ? !isInJapan(formData.lat, formData.lng)
-        : false;
-      const noCoords = !formData.lat || !formData.lng;
-      const needsGeocode = !isManual && (!editingId || noCoords || nameChanged || addressChanged || hasInvalidCoords);
+      // manualCoord:false の場合は毎回再取得（過去の誤座標も修正される）
+      const needsGeocode = !isManual;
 
       let lat = formData.lat;
       let lng = formData.lng;
