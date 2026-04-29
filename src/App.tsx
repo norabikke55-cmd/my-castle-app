@@ -350,8 +350,9 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         streetViewControl: false,
         fullscreenControl: false,
         mapTypeControlOptions: {
-          mapTypeIds: ["roadmap", "satellite", "hybrid"],
-          position: google.maps.ControlPosition.BOTTOM_RIGHT,
+          mapTypeIds: ["roadmap", "satellite"],
+          position: google.maps.ControlPosition.TOP_RIGHT,
+          style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
         },
       });
       mapInstanceRef.current = map;
@@ -552,8 +553,9 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         streetViewControl: false,
         fullscreenControl: false,
         mapTypeControlOptions: {
-          mapTypeIds: ["roadmap", "satellite", "hybrid"],
-          position: google.maps.ControlPosition.BOTTOM_RIGHT,
+          mapTypeIds: ["roadmap", "satellite"],
+          position: google.maps.ControlPosition.TOP_RIGHT,
+          style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
         },
       });
       const cmarker = new google.maps.Marker({
