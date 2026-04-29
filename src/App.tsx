@@ -314,6 +314,10 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
 
 // ─── マップページ ───────────────────────────────────────
 
+// ─── マップページ（Google Maps） ───────────────────────
+
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
+
 const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVisible }: {
   castles: any[];
   onCastleSelect: (castle: any) => void;
@@ -324,154 +328,167 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const infoWindowRef = useRef<any>(null);
   const [mapReady, setMapReady] = useState(false);
   const [mapSearch, setMapSearch] = useState("");
   const mapSearchRef = useRef<HTMLInputElement>(null);
   const [editingCoord, setEditingCoord] = useState<any>(null);
   const coordMapRef = useRef<HTMLDivElement>(null);
   const coordMapInstanceRef = useRef<any>(null);
+  const coordMarkerRef = useRef<any>(null);
   const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
 
+  // Google Maps 初期化
   useEffect(() => {
-    if (!document.getElementById("leaflet-css")) {
-      const link = document.createElement("link");
-      link.id = "leaflet-css"; link.rel = "stylesheet";
-      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(link);
-    }
-    const init = () => {
-      const L = (window as any).L;
-      if (!mapRef.current || mapInstanceRef.current || !L) return;
-      // ④ 名古屋中心・ズーム10
-      const map = L.map(mapRef.current, { zoomControl: true }).setView([35.180, 136.907], 10);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 18,
-      }).addTo(map);
-      mapInstanceRef.current = map;
-
-      map.on('popupopen', (e: any) => {
-        const el = e.popup.getElement(); if (!el) return;
-        const nameEl = el.querySelector('[data-castle-id]');
-        if (nameEl) {
-          const castleId = nameEl.getAttribute('data-castle-id');
-          nameEl.addEventListener('click', (ev: Event) => {
-            ev.stopPropagation();
-            const found = (map as any)._castlesRef?.find((c: any) => c.id === castleId);
-            if (found) onCastleSelect(found);
-          });
-        }
-        const editEl = el.querySelector('[data-edit-coord-id]');
-        if (editEl) {
-          const editId = editEl.getAttribute('data-edit-coord-id');
-          editEl.addEventListener('click', (ev: Event) => {
-            ev.stopPropagation();
-            const found = (map as any)._castlesRef?.find((c: any) => c.id === editId);
-            if (found) { map.closePopup(); setEditingCoord(found); setCoordLatLng(found.lat && found.lng ? { lat: found.lat, lng: found.lng } : null); }
-          });
-        }
+    const initMap = () => {
+      const google = (window as any).google;
+      if (!mapRef.current || mapInstanceRef.current || !google?.maps) return;
+      const map = new google.maps.Map(mapRef.current, {
+        center: { lat: 35.180, lng: 136.907 },
+        zoom: 10,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: false,
+        mapTypeControlOptions: {
+          mapTypeIds: ["roadmap", "satellite", "hybrid"],
+          position: google.maps.ControlPosition.BOTTOM_RIGHT,
+        },
       });
+      mapInstanceRef.current = map;
+      infoWindowRef.current = new google.maps.InfoWindow();
       setMapReady(true);
     };
-    if ((window as any).L) { init(); }
-    else {
-      const s = document.createElement("script");
-      s.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"; s.onload = init;
-      document.head.appendChild(s);
+
+    const scriptId = "google-maps-script";
+    if ((window as any).google?.maps) {
+      initMap();
+    } else if (!document.getElementById(scriptId)) {
+      const script = document.createElement("script");
+      script.id = scriptId;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&language=ja`;
+      script.async = true;
+      script.onload = initMap;
+      document.head.appendChild(script);
+    } else {
+      const existing = document.getElementById(scriptId) as HTMLScriptElement;
+      existing.addEventListener("load", initMap);
     }
-    return () => { if (mapInstanceRef.current) { mapInstanceRef.current.remove(); mapInstanceRef.current = null; } };
+
+    return () => {
+      markersRef.current.forEach(m => m.setMap(null));
+      markersRef.current = [];
+      mapInstanceRef.current = null;
+      infoWindowRef.current = null;
+    };
   }, []);
 
-  // 表示切替時にLeafletのサイズを再計算、フォーカスなしなら名古屋に戻す
+  // 表示切替時にサイズ再計算・リセット
   useEffect(() => {
     if (isVisible && mapInstanceRef.current) {
+      const google = (window as any).google;
       setTimeout(() => {
-        mapInstanceRef.current.invalidateSize();
+        google.maps.event.trigger(mapInstanceRef.current, "resize");
         if (!focusCastleId && !pendingFocusRef.current) {
-          mapInstanceRef.current.closePopup();
-          mapInstanceRef.current.setView([35.180, 136.907], 10, { animate: false });
+          infoWindowRef.current?.close();
+          mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
+          mapInstanceRef.current.setZoom(10);
         }
       }, 50);
     }
   }, [isVisible]);
+
+  // カードからフォーカス
   const pendingFocusRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!focusCastleId) return;
     pendingFocusRef.current = focusCastleId;
     if (!mapReady || !mapInstanceRef.current) return;
-
-    const id = focusCastleId;
-    pendingFocusRef.current = null;
-
-    const castle = castles.find(c => c.id === id);
-    if (!castle) return;
-
-    (async () => {
-      let lat: number | null = castle.lat ?? null;
-      let lng: number | null = castle.lng ?? null;
-      if (!lat || !lng) {
-        const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
-        if (coords) { lat = coords.lat; lng = coords.lng; }
-      }
-      if (lat && lng) {
-        mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
-        setTimeout(() => {
-          const marker = markersRef.current.find(m => (m as any)._castleId === id);
-          if (marker) marker.openPopup();
-        }, 600);
-      } else {
-        const coords = PREF_COORDS[castle.pref];
-        if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
-      }
-      onFocusHandled?.();
-    })();
+    executeFocus(focusCastleId);
   }, [focusCastleId]);
 
-  // mapReady になった時点でpendingがあれば実行
   useEffect(() => {
-    if (!mapReady || !pendingFocusRef.current || !mapInstanceRef.current) return;
+    if (!mapReady || !pendingFocusRef.current) return;
     const id = pendingFocusRef.current;
     pendingFocusRef.current = null;
-    const castle = castles.find(c => c.id === id);
-    if (!castle) return;
-    (async () => {
-      let lat: number | null = castle.lat ?? null;
-      let lng: number | null = castle.lng ?? null;
-      if (!lat || !lng) {
-        const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
-        if (coords) { lat = coords.lat; lng = coords.lng; }
-      }
-      if (lat && lng) {
-        mapInstanceRef.current.setView([lat, lng], 14, { animate: true });
-        setTimeout(() => {
-          const marker = markersRef.current.find(m => (m as any)._castleId === id);
-          if (marker) marker.openPopup();
-        }, 600);
-      } else {
-        const coords = PREF_COORDS[castle.pref];
-        if (coords) mapInstanceRef.current.setView(coords, 11, { animate: true });
-      }
-      onFocusHandled?.();
-    })();
+    executeFocus(id);
   }, [mapReady]);
 
+  const executeFocus = async (id: string) => {
+    const castle = castles.find(c => c.id === id);
+    if (!castle) return;
+    let lat = castle.lat ?? null;
+    let lng = castle.lng ?? null;
+    if (!lat || !lng) {
+      const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+      if (coords) { lat = coords.lat; lng = coords.lng; }
+    }
+    if (lat && lng && mapInstanceRef.current) {
+      mapInstanceRef.current.setCenter({ lat, lng });
+      mapInstanceRef.current.setZoom(14);
+      const marker = markersRef.current.find(m => (m as any)._castleId === id);
+      if (marker && infoWindowRef.current) {
+        setTimeout(() => openInfoWindow(castle, marker), 500);
+      }
+    } else {
+      const coords = PREF_COORDS[castle.pref];
+      if (coords && mapInstanceRef.current) {
+        mapInstanceRef.current.setCenter({ lat: coords[0], lng: coords[1] });
+        mapInstanceRef.current.setZoom(11);
+      }
+    }
+    onFocusHandled?.();
+  };
+
+  const openInfoWindow = (castle: any, marker: any) => {
+    const google = (window as any).google;
+    if (!infoWindowRef.current || !mapInstanceRef.current) return;
+    const starsHtml = [1,2,3,4,5].map(n =>
+      `<span style="color:${n<=(castle.rating||5)?"#F59E0B":"#e5e7eb"};font-size:14px">★</span>`
+    ).join("");
+    infoWindowRef.current.setContent(`
+      <div style="font-family:sans-serif;min-width:160px;padding:4px 2px">
+        <div id="iw-name-${castle.id}" style="font-weight:900;font-size:15px;margin-bottom:4px;color:#B7410E;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">${castle.name}</div>
+        ${castle.recordType==="battlefield"?`<div style="font-size:10px;color:#7c6a56;font-weight:700;margin-bottom:2px">古戦場</div>`:""}
+        ${castle.province?`<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:2px">${castle.province}国</div>`:""}
+        ${castle.pref?`<div style="font-size:11px;color:#78716c;margin-bottom:5px">${castle.pref}</div>`:""}
+        ${castle.visitDate?`<div style="font-size:11px;color:#666;margin-bottom:5px">📅 ${castle.visitDate}</div>`:""}
+        <div style="margin-bottom:6px">${starsHtml}</div>
+        <div style="display:flex;gap:12px;align-items:center;">
+          <span style="font-size:10px;color:#aaa;">城名→カード表示</span>
+          <span id="iw-edit-${castle.id}" style="font-size:11px;color:#B7410E;cursor:pointer;text-decoration:underline;font-weight:bold;">位置修正</span>
+        </div>
+      </div>`);
+    infoWindowRef.current.open(mapInstanceRef.current, marker);
+
+    // ポップアップ表示後にクリックイベントを設定
+    google.maps.event.addListenerOnce(infoWindowRef.current, "domready", () => {
+      const nameEl = document.getElementById(`iw-name-${castle.id}`);
+      if (nameEl) nameEl.addEventListener("click", () => onCastleSelect(castle));
+      const editEl = document.getElementById(`iw-edit-${castle.id}`);
+      if (editEl) editEl.addEventListener("click", () => {
+        infoWindowRef.current?.close();
+        setEditingCoord(castle);
+        setCoordLatLng(castle.lat && castle.lng ? { lat: castle.lat, lng: castle.lng } : null);
+      });
+    });
+  };
+
+  // マーカー更新
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
-    const L = (window as any).L;
-    markersRef.current.forEach((m) => m.remove()); markersRef.current = [];
-    (mapInstanceRef.current as any)._castlesRef = castles;
+    const google = (window as any).google;
+    markersRef.current.forEach(m => m.setMap(null)); markersRef.current = [];
 
-    const markerStyle = (r: number) => {
-      if (r >= 5) return { color: "#B7410E", size: 36, shape: "12px", border: "3px solid #fff" };
-      if (r >= 4) return { color: "#d97706", size: 30, shape: "50%",  border: "2px solid #fff" };
-      if (r >= 3) return { color: "#7c6a56", size: 24, shape: "50%",  border: "2px solid #fff" };
-      return              { color: "#9ca3af", size: 20, shape: "50%",  border: "2px solid #fff" };
-    };
+    const markerColor = (r: number) =>
+      r >= 5 ? "#B7410E" : r >= 4 ? "#d97706" : r >= 3 ? "#7c6a56" : "#9ca3af";
+    const markerScale = (r: number) =>
+      r >= 5 ? 1.4 : r >= 4 ? 1.2 : r >= 3 ? 1.0 : 0.85;
 
     const term = mapSearch.trim().toLowerCase();
-    const filtered = term ? castles.filter(c => (c.name+(c.aka||"")+(c.pref||"")).toLowerCase().includes(term)) : castles;
-    const positions: [number, number][] = [];
+    const filtered = term
+      ? castles.filter(c => (c.name+(c.aka||"")+(c.pref||"")).toLowerCase().includes(term))
+      : castles;
 
     filtered.forEach((castle) => {
       let lat: number, lng: number;
@@ -482,60 +499,86 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         lat = coords[0] + (((h & 0xff) - 128) / 128) * 0.22;
         lng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
       }
-      const { color, size, shape, border } = markerStyle(castle.rating || 5);
+
+      const color = markerColor(castle.rating || 5);
+      const scale = markerScale(castle.rating || 5);
       const emoji = castle.recordType === "battlefield" ? "⚔️" : "🏯";
-      const half = size / 2;
-      const icon = L.divIcon({
-        html: `<div style="background:${color};width:${size}px;height:${size}px;border-radius:${shape};display:flex;align-items:center;justify-content:center;font-size:${size*0.5}px;border:${border};box-shadow:0 2px 8px rgba(0,0,0,0.35);">${emoji}</div>`,
-        className: "", iconSize: [size, size], iconAnchor: [half, half], popupAnchor: [0, -half - 2],
+
+      const marker = new google.maps.Marker({
+        position: { lat, lng },
+        map: mapInstanceRef.current,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: color,
+          fillOpacity: 1,
+          strokeColor: "#fff",
+          strokeWeight: 2,
+          scale: 12 * scale,
+        },
+        label: { text: emoji, fontSize: `${14 * scale}px`, },
+        title: castle.name,
       });
-      const starsHtml = [1,2,3,4,5].map((n) => `<span style="color:${n<=(castle.rating||5)?"#F59E0B":"#e5e7eb"};font-size:13px">★</span>`).join("");
-      const marker = L.marker([lat, lng], { icon }).addTo(mapInstanceRef.current).bindPopup(`
-        <div style="font-family:sans-serif;min-width:150px;padding:2px">
-          <div data-castle-id="${castle.id}" style="font-weight:900;font-size:14px;margin-bottom:3px;color:#B7410E;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">${castle.name}</div>
-          ${castle.recordType==="battlefield"?`<div style="font-size:10px;color:#7c6a56;font-weight:700;margin-bottom:2px">古戦場</div>`:""}
-          ${castle.province?`<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:2px">${castle.province}国</div>`:""}
-          ${castle.pref?`<div style="font-size:10px;color:#78716c;margin-bottom:4px">${castle.pref}</div>`:""}
-          ${castle.visitDate?`<div style="font-size:11px;color:#666;margin-bottom:4px">📅 ${castle.visitDate}</div>`:""}
-          <div>${starsHtml}</div>
-          <div style="margin-top:8px;display:flex;gap:10px;align-items:center;">
-            <span style="font-size:10px;color:#aaa;">城名→カード表示</span>
-            <span data-edit-coord-id="${castle.id}" style="font-size:10px;color:#B7410E;cursor:pointer;text-decoration:underline;">位置修正</span>
-          </div>
-        </div>`);
+
+      marker.addListener("click", () => openInfoWindow(castle, marker));
       (marker as any)._castleId = castle.id;
       markersRef.current.push(marker);
-      positions.push([lat, lng]);
     });
 
-    if (term && positions.length === 1) { mapInstanceRef.current.setView(positions[0], 13, { animate: true }); markersRef.current[0]?.openPopup(); }
-    else if (term && positions.length > 1) { mapInstanceRef.current.fitBounds(positions, { padding: [40, 40], maxZoom: 12 }); }
+    // 検索絞り込み時のフィット
+    if (term && markersRef.current.length === 1) {
+      const pos = markersRef.current[0].getPosition();
+      mapInstanceRef.current.setCenter(pos);
+      mapInstanceRef.current.setZoom(13);
+      openInfoWindow(filtered[0], markersRef.current[0]);
+    } else if (term && markersRef.current.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      markersRef.current.forEach(m => bounds.extend(m.getPosition()));
+      mapInstanceRef.current.fitBounds(bounds);
+    }
   }, [castles, mapReady, mapSearch]);
 
-  // 手動座標編集マップ
+  // 座標編集マップ初期化
   useEffect(() => {
     if (!editingCoord) return;
-    const L = (window as any).L;
+    const google = (window as any).google;
     setTimeout(() => {
       if (!coordMapRef.current || coordMapInstanceRef.current) return;
       const initLat = coordLatLng?.lat ?? 35.180;
       const initLng = coordLatLng?.lng ?? 136.907;
-      const cmap = L.map(coordMapRef.current).setView([initLat, initLng], 14);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: '© OpenStreetMap', maxZoom: 18,
-      }).addTo(cmap);
-      const marker = L.marker([initLat, initLng], { draggable: true }).addTo(cmap);
-      marker.on('dragend', () => { const pos = marker.getLatLng(); setCoordLatLng({ lat: pos.lat, lng: pos.lng }); });
-      cmap.on('click', (e: any) => { marker.setLatLng(e.latlng); setCoordLatLng({ lat: e.latlng.lat, lng: e.latlng.lng }); });
+      const cmap = new google.maps.Map(coordMapRef.current, {
+        center: { lat: initLat, lng: initLng },
+        zoom: 14,
+        mapTypeControl: true,
+        streetViewControl: false,
+        fullscreenControl: false,
+        mapTypeControlOptions: {
+          mapTypeIds: ["roadmap", "satellite", "hybrid"],
+          position: google.maps.ControlPosition.BOTTOM_RIGHT,
+        },
+      });
+      const cmarker = new google.maps.Marker({
+        position: { lat: initLat, lng: initLng },
+        map: cmap,
+        draggable: true,
+        title: editingCoord.name,
+      });
+      cmarker.addListener("dragend", () => {
+        const pos = cmarker.getPosition();
+        setCoordLatLng({ lat: pos.lat(), lng: pos.lng() });
+      });
+      cmap.addListener("click", (e: any) => {
+        cmarker.setPosition(e.latLng);
+        setCoordLatLng({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+      });
       coordMapInstanceRef.current = cmap;
+      coordMarkerRef.current = cmarker;
     }, 100);
-    return () => { if (coordMapInstanceRef.current) { coordMapInstanceRef.current.remove(); coordMapInstanceRef.current = null; } };
+    return () => { coordMapInstanceRef.current = null; coordMarkerRef.current = null; };
   }, [editingCoord]);
 
-  const validCount = castles.filter((c) => (c.lat && c.lng) || PREF_COORDS[c.pref]).length;
   const filteredCount = mapSearch.trim()
     ? castles.filter(c => (c.name+(c.aka||"")+(c.pref||"")).toLowerCase().includes(mapSearch.trim().toLowerCase())).length
-    : validCount;
+    : castles.length;
 
   return (
     <div className="relative" style={{ height: "calc(100vh - 120px)" }}>
@@ -548,8 +591,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       <div ref={mapRef} className="w-full h-full" />
       {mapReady && (
         <>
-          {/* ③ 検索バー：幅を縮小 */}
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000]" style={{ width: "50%", minWidth: "140px", maxWidth: "260px" }}>
+          {/* 検索バー */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[10]" style={{ width: "50%", minWidth: "160px", maxWidth: "280px" }}>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
               <input ref={mapSearchRef} type="text" placeholder="城名・県名..."
@@ -565,22 +608,25 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
               <div className="mt-1 text-center text-[10px] font-black text-stone-500 bg-white/90 rounded-lg py-0.5 shadow">{filteredCount} 件</div>
             )}
           </div>
-          <div className="absolute bottom-16 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[1000]">
+
+          {/* 凡例 */}
+          <div className="absolute bottom-10 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[10]">
             <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-2">評価</p>
             {[
-              { color: "#B7410E", size: 18, shape: "4px", label: "★★★★★" },
-              { color: "#d97706", size: 15, shape: "50%", label: "★★★★" },
-              { color: "#7c6a56", size: 12, shape: "50%", label: "★★★" },
-              { color: "#9ca3af", size: 10, shape: "50%", label: "★★以下" },
-            ].map(({ color, size, shape, label }) => (
+              { color: "#B7410E", size: 18, label: "★★★★★" },
+              { color: "#d97706", size: 15, label: "★★★★" },
+              { color: "#7c6a56", size: 12, label: "★★★" },
+              { color: "#9ca3af", size: 10, label: "★★以下" },
+            ].map(({ color, size, label }) => (
               <div key={label} className="flex items-center gap-2 mb-1.5 last:mb-0">
-                <div style={{ background: color, width: size, height: size, borderRadius: shape, border: "2px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)", flexShrink: 0 }} />
+                <div style={{ background: color, width: size, height: size, borderRadius: "50%", border: "2px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)", flexShrink: 0 }} />
                 <span className="text-[10px] font-bold text-stone-600">{label}</span>
               </div>
             ))}
           </div>
         </>
       )}
+
       {/* 手動座標編集モーダル */}
       {editingCoord && (
         <div className="absolute inset-0 bg-stone-900/70 z-[2000] flex items-end md:items-center justify-center">
