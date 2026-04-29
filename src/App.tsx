@@ -351,21 +351,21 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         fullscreenControl: false,
         mapTypeControlOptions: {
           mapTypeIds: ["roadmap", "satellite"],
-          position: google.maps.ControlPosition.BOTTOM_LEFT,
+          position: google.maps.ControlPosition.LEFT_BOTTOM,
           style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
         },
       });
 
-      // 地図タイプボタンの文字を小さくするCSS注入
+      // スタイル調整
       const style = document.createElement("style");
       style.textContent = `
+        .gm-style-mtc { margin-bottom: 80px !important; }
         .gm-style-mtc button { font-size: 11px !important; padding: 2px 6px !important; height: auto !important; }
-        .gm-style .gm-style-iw-c { padding: 8px !important; }
+        .gm-style .gm-style-iw-c { padding: 6px 10px 8px 10px !important; min-width: 0 !important; }
         .gm-style .gm-style-iw-d { overflow: hidden !important; padding: 0 !important; }
-        .gm-style .gm-style-iw-t::after { display: none !important; }
-        .gm-style-iw-ch { padding-top: 0 !important; }
-        .gm-style-iw button.gm-ui-hover-effect { top: 0 !important; right: 0 !important; width: 24px !important; height: 24px !important; }
-        .gm-style-iw button.gm-ui-hover-effect span { width: 14px !important; height: 14px !important; }
+        .gm-style-iw-ch { padding-top: 0 !important; height: 0 !important; min-height: 0 !important; }
+        .gm-ui-hover-effect { top: -2px !important; right: -2px !important; width: 20px !important; height: 20px !important; }
+        .gm-ui-hover-effect span { width: 12px !important; height: 12px !important; margin: 4px !important; }
       `;
       document.head.appendChild(style);
       mapInstanceRef.current = map;
@@ -458,20 +458,19 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
     const google = (window as any).google;
     if (!infoWindowRef.current || !mapInstanceRef.current) return;
     const starsHtml = [1,2,3,4,5].map(n =>
-      `<span style="color:${n<=(castle.rating||5)?"#F59E0B":"#e5e7eb"};font-size:14px">★</span>`
+      `<span style="color:${n<=(castle.rating||5)?"#F59E0B":"#e5e7eb"};font-size:12px">★</span>`
     ).join("");
     infoWindowRef.current.setContent(`
-      <div style="font-family:sans-serif;min-width:160px;padding:4px 2px">
-        <div id="iw-name-${castle.id}" style="font-weight:900;font-size:15px;margin-bottom:4px;color:#B7410E;cursor:pointer;text-decoration:underline;text-underline-offset:2px;">${castle.name}</div>
-        ${castle.recordType==="battlefield"?`<div style="font-size:10px;color:#7c6a56;font-weight:700;margin-bottom:2px">古戦場</div>`:""}
-        ${castle.province?`<div style="font-size:10px;color:#92400e;font-weight:700;margin-bottom:2px">${castle.province}国</div>`:""}
-        ${castle.pref?`<div style="font-size:11px;color:#78716c;margin-bottom:5px">${castle.pref}</div>`:""}
-        ${castle.visitDate?`<div style="font-size:11px;color:#666;margin-bottom:5px">📅 ${castle.visitDate}</div>`:""}
-        <div style="margin-bottom:6px">${starsHtml}</div>
-        <div style="display:flex;gap:12px;align-items:center;">
-          <span style="font-size:10px;color:#aaa;">城名→カード表示</span>
-          <span id="iw-edit-${castle.id}" style="font-size:11px;color:#B7410E;cursor:pointer;text-decoration:underline;font-weight:bold;">位置修正</span>
+      <div style="font-family:sans-serif;padding:2px 4px 4px 2px;min-width:130px;max-width:200px">
+        <div id="iw-name-${castle.id}" style="font-weight:900;font-size:13px;margin-bottom:3px;color:#B7410E;cursor:pointer;text-decoration:underline;text-underline-offset:2px;line-height:1.3">${castle.name}</div>
+        <div style="font-size:10px;color:#78716c;margin-bottom:3px;display:flex;flex-wrap:wrap;gap:4px;">
+          ${castle.recordType==="battlefield"?`<span style="color:#7c6a56;font-weight:700">古戦場</span>`:""}
+          ${castle.province?`<span style="color:#92400e;font-weight:700">${castle.province}国</span>`:""}
+          ${castle.pref?`<span>${castle.pref}</span>`:""}
         </div>
+        ${castle.visitDate?`<div style="font-size:10px;color:#666;margin-bottom:3px">📅 ${castle.visitDate}</div>`:""}
+        <div style="margin-bottom:4px">${starsHtml}</div>
+        <span id="iw-edit-${castle.id}" style="font-size:10px;color:#B7410E;cursor:pointer;text-decoration:underline;font-weight:bold;">位置修正</span>
       </div>`);
     infoWindowRef.current.open(mapInstanceRef.current, marker);
 
