@@ -67,33 +67,6 @@ const jaSort = (a: string, b: string) =>
 
 // ─── 座標取得ユーティリティ ────────────────────────────
 
-// Wikipedia APIで城名から座標を取得
-const fetchCoordsFromWikipedia = async (name: string): Promise<{ lat: number; lng: number } | null> => {
-  try {
-    const url = `https://ja.wikipedia.org/w/api.php?action=query&prop=coordinates&titles=${encodeURIComponent(name)}&format=json&origin=*`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const pages = data?.query?.pages;
-    if (!pages) return null;
-    const page = Object.values(pages)[0] as any;
-    if (!page?.coordinates?.[0]) return null;
-    const { lat, lon } = page.coordinates[0];
-    return { lat, lng: lon };
-  } catch { return null; }
-};
-
-// Nominatim（OpenStreetMap）で住所または城名から座標を取得
-const fetchCoordsFromNominatim = async (query: string): Promise<{ lat: number; lng: number } | null> => {
-  try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&accept-language=ja&countrycodes=jp`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data?.[0]) return null;
-    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
-  } catch { return null; }
-};
-
 // 都道府県ごとの緯度経度の大まかな範囲（lat_min, lat_max, lng_min, lng_max）
 const PREF_BOUNDS: Record<string, [number, number, number, number]> = {
   "北海道":[41.3,45.6,139.3,145.9],"青森県":[40.1,41.6,139.8,141.7],"岩手県":[38.7,40.5,140.6,142.1],
@@ -125,67 +98,28 @@ const isInPref = (lat: number, lng: number, pref: string): boolean => {
 const isInJapan = (lat: number, lng: number): boolean =>
   lat >= 24 && lat <= 46 && lng >= 122 && lng <= 154;
 
-// 住所を末尾から段階的に短縮してリストを生成（Google Geocoding用）
-const shortenAddress = (address: string): string[] => {
-  const result: string[] = [];
-  const separators = /(?<=市|区|町|村|字|大字|丁目|番町|条)/g;
-  const parts = address.split(separators);
-  for (let i = parts.length - 1; i >= 1; i--) {
-    const s = parts.slice(0, i).join("");
-    if (s && s !== address) result.push(s);
-  }
-  return result;
-};
-
-// 座標取得のメイン関数
-// ①住所（Google）→ ②Wikipedia → ③城名+住所の一部 → ④住所を段階的短縮 → ⑤都道府県
+// 座標取得のメイン関数（Google専用・シンプル版）
+// 住所優先 → 都道府県+城名 → 城名のみ の順で最大3回だけ試行
 const resolveCoords = async (name: string, address: string, pref: string): Promise<{ lat: number; lng: number } | null> => {
   const valid = (c: { lat: number; lng: number } | null) =>
     c && isInJapan(c.lat, c.lng) && (pref ? isInPref(c.lat, c.lng, pref) : true);
 
-  // 1. Google Geocoding で住所検索（最優先・高精度）
+  // 1. 住所で検索（最優先）
   if (address) {
-    const fromAddr = await fetchCoordsFromGoogleGeocoding(address);
-    if (valid(fromAddr)) return fromAddr!;
-
-    // 都道府県を先頭に付けて再試行
-    if (pref && !address.startsWith(pref)) {
-      const fromAddrPref = await fetchCoordsFromGoogleGeocoding(`${pref}${address}`);
-      if (valid(fromAddrPref)) return fromAddrPref!;
-    }
+    const query = (pref && !address.startsWith(pref)) ? `${pref}${address}` : address;
+    const result = await fetchCoordsFromGoogleGeocoding(query);
+    if (valid(result)) return result!;
   }
 
-  // 2. Wikipedia から取得（住所でヒットしない場合の補完）
-  const fromWiki = await fetchCoordsFromWikipedia(name);
-  if (valid(fromWiki)) return fromWiki!;
-
-  // 3. 城名 + 住所の各部分で検索（市町村・地名レベルまで対応）
-  if (address) {
-    const shortened = shortenAddress(address);
-    for (const shortAddr of shortened) {
-      const fromNameAddr = await fetchCoordsFromGoogleGeocoding(`${name} ${shortAddr}`);
-      if (valid(fromNameAddr)) return fromNameAddr!;
-    }
-  }
+  // 2. 都道府県 + 城名で検索
   if (pref) {
-    const fromNamePref = await fetchCoordsFromGoogleGeocoding(`${name} ${pref}`);
-    if (valid(fromNamePref)) return fromNamePref!;
+    const result = await fetchCoordsFromGoogleGeocoding(`${pref} ${name}`);
+    if (valid(result)) return result!;
   }
 
-  // 4. 住所を段階的に短縮して検索（地名→市町村→都道府県の順）
-  if (address) {
-    const shortened = shortenAddress(address);
-    for (const shortAddr of shortened) {
-      const fromShort = await fetchCoordsFromGoogleGeocoding(shortAddr);
-      if (valid(fromShort)) return fromShort!;
-    }
-  }
-
-  // 5. 都道府県のみ（最終フォールバック）
-  if (pref) {
-    const fromPref = await fetchCoordsFromGoogleGeocoding(pref);
-    if (valid(fromPref)) return fromPref!;
-  }
+  // 3. 城名のみで検索（最終手段）
+  const result = await fetchCoordsFromGoogleGeocoding(name);
+  if (valid(result)) return result!;
 
   return null;
 };
@@ -364,6 +298,7 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
   const coordMapInstanceRef = useRef<any>(null);
   const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const pendingFocusRef = useRef<string | null>(null);
+  const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
 
   // Google Maps 初期化
   useEffect(() => {
@@ -373,16 +308,11 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       const map = new google.maps.Map(mapRef.current, {
         center: { lat: 35.180, lng: 136.907 },
         zoom: 10,
-        mapTypeControl: true,
+        mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
         zoomControl: true,
         zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
-        mapTypeControlOptions: {
-          mapTypeIds: ["roadmap", "satellite"],
-          position: google.maps.ControlPosition.RIGHT_BOTTOM,
-          style: google.maps.MapTypeControlStyle.DROPDOWN_MENU,
-        },
       });
 
       // スタイル調整（ポップアップ余白削減・ボタン文字縮小）
@@ -390,8 +320,6 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       style.id = "gmap-custom-style";
       if (!document.getElementById("gmap-custom-style")) {
         style.textContent = `
-          .gm-style-mtc { margin-bottom: 44px !important; }
-          .gm-style-mtc button { font-size: 11px !important; padding: 2px 6px !important; height: auto !important; }
           .gm-style .gm-style-iw-c { padding: 0 !important; min-width: 0 !important; box-shadow: 0 2px 12px rgba(0,0,0,0.2) !important; }
           .gm-style .gm-style-iw-d { overflow: hidden !important; padding: 8px 28px 8px 10px !important; }
           .gm-style-iw-ch { display: none !important; }
@@ -426,6 +354,12 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       infoWindowRef.current = null;
     };
   }, []);
+
+  // mapType切り替え
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    mapInstanceRef.current.setMapTypeId(mapType);
+  }, [mapType]);
 
   // ② ページ表示切替：リサイズ + フォーカスなければ名古屋にリセット
   useEffect(() => {
@@ -635,9 +569,9 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       <div ref={mapRef} className="w-full h-full" />
       {mapReady && (
         <>
-          {/* 検索バー（上部中央） */}
-          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[10]" style={{ width: "50%", minWidth: "160px", maxWidth: "260px" }}>
-            <div className="relative">
+        {/* 検索バー + 地図切り替えボタン（上部中央） */}
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[10] flex items-start gap-2" style={{ width: "calc(50% + 56px)", minWidth: "220px", maxWidth: "324px" }}>
+            <div className="relative flex-1">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
               <input ref={mapSearchRef} type="text" placeholder="城名・県名..."
                 className="w-full pl-7 pr-6 py-2 bg-white/95 backdrop-blur-sm rounded-xl text-xs border border-stone-200 shadow-md outline-none focus:border-amber-300"
@@ -648,8 +582,16 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
                 </button>
               )}
             </div>
+            {/* 地図/航空写真 切り替えボタン */}
+            <button
+              onClick={() => setMapType(t => t === "roadmap" ? "satellite" : "roadmap")}
+              className="shrink-0 h-[33px] px-2.5 bg-white/95 backdrop-blur-sm rounded-xl border border-stone-200 shadow-md text-[10px] font-black text-stone-600 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-all whitespace-nowrap flex items-center gap-1"
+              title={mapType === "roadmap" ? "航空写真に切り替え" : "地図に切り替え"}
+            >
+              {mapType === "roadmap" ? "🛰 衛星" : "🗺 地図"}
+            </button>
             {mapSearch && (
-              <div className="mt-1 text-center text-[10px] font-black text-stone-500 bg-white/90 rounded-lg py-0.5 shadow">{filteredCount} 件</div>
+              <div className="absolute top-full left-0 mt-1 text-center text-[10px] font-black text-stone-500 bg-white/90 rounded-lg py-0.5 shadow" style={{ width: "calc(100% - 64px)" }}>{filteredCount} 件</div>
             )}
           </div>
 
@@ -1395,6 +1337,35 @@ export default function App() {
                   </div>
                 </div>
                 <ArrowDown size={16} className="text-stone-300" />
+              </button>
+              {/* 既存データ一括座標付与 */}
+              <button onClick={async () => {
+                const targets = castles.filter(c => !c.manualCoord && (!c.lat || !c.lng));
+                if (targets.length === 0) { alert("座標未設定のデータはありません"); return; }
+                if (!window.confirm(`座標が未設定の ${targets.length} 件にGoogle座標を付与します。\n時間がかかる場合があります。実行しますか？`)) return;
+                setShowSettings(false);
+                let success = 0, fail = 0;
+                for (const castle of targets) {
+                  const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+                  const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", castle.id);
+                  if (coords) {
+                    await setDoc(ref, { ...castle, lat: coords.lat, lng: coords.lng, updatedAt: new Date().toISOString() });
+                    success++;
+                  } else {
+                    fail++;
+                  }
+                  await new Promise(r => setTimeout(r, 200)); // API負荷軽減
+                }
+                alert(`座標付与完了\n成功: ${success} 件 / 失敗: ${fail} 件`);
+              }} className="w-full flex items-center justify-between p-6 bg-stone-50 rounded-[24px] font-black text-sm hover:bg-stone-100 transition-all">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 bg-white rounded-lg shadow-sm"><MapPin size={20} className="text-stone-800" /></div>
+                  <div className="text-left">
+                    <p className="text-stone-900">座標を一括付与</p>
+                    <p className="text-[10px] text-stone-400 font-normal">未設定データにGoogle座標を付与</p>
+                  </div>
+                </div>
+                <ArrowUp size={16} className="text-stone-300" />
               </button>
             </div>
             <button onClick={() => setShowSettings(false)}
