@@ -365,7 +365,12 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
   useEffect(() => {
     if (!isVisible || !mapInstanceRef.current) return;
     const google = (window as any).google;
+    // 短いtimeoutでDOMを確定させてからresizeを2段階で送る
     setTimeout(() => {
+      google.maps.event.trigger(mapInstanceRef.current, "resize");
+    }, 50);
+    setTimeout(() => {
+      if (!mapInstanceRef.current) return;
       google.maps.event.trigger(mapInstanceRef.current, "resize");
       if (!focusCastleId && !pendingFocusRef.current) {
         infoWindowRef.current?.close();
@@ -376,7 +381,7 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         pendingFocusRef.current = null;
         executeFocus(id);
       }
-    }, 150);
+    }, 350);
   }, [isVisible]);
 
   // フォーカスID変化を監視
@@ -1342,7 +1347,13 @@ export default function App() {
               <button onClick={async () => {
                 const google = (window as any).google;
                 if (!google?.maps) { alert("マップページを一度開いてから実行してください"); return; }
+                // 診断：全件のlat/lng状況を確認
+                const noCoord = castles.filter(c => !c.lat && !c.lng);
+                const hasCoord = castles.filter(c => c.lat && c.lng);
+                const manual = castles.filter(c => c.manualCoord);
                 const targets = castles.filter(c => !c.manualCoord && (!c.lat || !c.lng));
+                const diagMsg = `全${castles.length}件\n座標あり: ${hasCoord.length}件\n座標なし: ${noCoord.length}件\n手動設定: ${manual.length}件\n付与対象: ${targets.length}件\n\n続けますか？`;
+                if (!window.confirm(diagMsg)) return;
                 if (targets.length === 0) { alert("座標未設定のデータはありません"); return; }
                 if (!window.confirm(`座標が未設定の ${targets.length} 件にGoogle座標を付与します。\n時間がかかる場合があります。実行しますか？`)) return;
                 setShowSettings(false);
@@ -1359,6 +1370,15 @@ export default function App() {
                       } else { resolve(null); }
                     });
                   });
+                // まず1件テスト
+                const testCastle = targets[0];
+                const testQuery = (testCastle.pref && testCastle.address && !testCastle.address.startsWith(testCastle.pref))
+                  ? testCastle.pref + testCastle.address : (testCastle.address || testCastle.pref + " " + testCastle.name);
+                const testResult = await geocodeOne(testQuery, testCastle.pref || "");
+                if (!testResult) {
+                  alert(`APIテスト失敗\n城名: ${testCastle.name}\nクエリ: ${testQuery}\n\nGoogle Maps APIキーのGeocoding APIが有効か確認してください。\nGoogle Cloud Console → APIとサービス → 認証情報 → APIキーの制限を確認してください。`);
+                  return;
+                }
                 let success = 0, fail = 0;
                 for (const castle of targets) {
                   const addr = castle.address || "";
