@@ -361,45 +361,43 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
     mapInstanceRef.current.setMapTypeId(mapType);
   }, [mapType]);
 
-  // ② ページ表示切替：リサイズ + フォーカスなければ名古屋にリセット
+  // ② ページ表示切替：リサイズのみ。フォーカス処理は別useEffectに完全分離
   useEffect(() => {
     if (!isVisible || !mapInstanceRef.current) return;
     const google = (window as any).google;
-    // 短いtimeoutでDOMを確定させてからresizeを2段階で送る
-    setTimeout(() => {
-      google.maps.event.trigger(mapInstanceRef.current, "resize");
-    }, 50);
+    // resizeを2段階で送ってグレー防止
+    setTimeout(() => { google.maps.event.trigger(mapInstanceRef.current, "resize"); }, 50);
     setTimeout(() => {
       if (!mapInstanceRef.current) return;
       google.maps.event.trigger(mapInstanceRef.current, "resize");
-      if (!focusCastleId && !pendingFocusRef.current) {
+      // フォーカス対象がない場合だけ名古屋にリセット
+      if (!pendingFocusRef.current) {
         infoWindowRef.current?.close();
         mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
         mapInstanceRef.current.setZoom(10);
-      } else if (pendingFocusRef.current) {
-        const id = pendingFocusRef.current;
-        pendingFocusRef.current = null;
-        executeFocus(id);
       }
-    }, 350);
+    }, 400);
   }, [isVisible]);
 
-  // フォーカスID変化を監視
+  // フォーカスID変化を監視：pendingに積んでおき、表示＆準備完了後に実行
   useEffect(() => {
     if (!focusCastleId) return;
     pendingFocusRef.current = focusCastleId;
+    // すでにマップが表示済み＆準備完了なら即実行
     if (mapReady && isVisible && mapInstanceRef.current) {
       const id = focusCastleId;
       pendingFocusRef.current = null;
-      setTimeout(() => executeFocus(id), 200);
+      // isVisibleのuseEffect(400ms)より後に実行して上書きされないようにする
+      setTimeout(() => executeFocus(id), 500);
     }
   }, [focusCastleId]);
 
+  // mapReady時にpendingがあれば実行
   useEffect(() => {
     if (!mapReady || !pendingFocusRef.current) return;
     const id = pendingFocusRef.current;
     pendingFocusRef.current = null;
-    executeFocus(id);
+    setTimeout(() => executeFocus(id), 500);
   }, [mapReady]);
 
   const executeFocus = (id: string) => {
