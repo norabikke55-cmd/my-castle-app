@@ -361,67 +361,52 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
     mapInstanceRef.current.setMapTypeId(mapType);
   }, [mapType]);
 
-  // ② ページ表示切替：リサイズのみ。フォーカス処理は別useEffectに完全分離
+  // ページ表示 + フォーカスを一本化
+  // isVisible/mapReady/focusCastleId のいずれかが変わったら再評価
   useEffect(() => {
-    if (!isVisible || !mapInstanceRef.current) return;
+    if (!isVisible || !mapReady || !mapInstanceRef.current) return;
     const google = (window as any).google;
-    // resizeを2段階で送ってグレー防止
-    setTimeout(() => { google.maps.event.trigger(mapInstanceRef.current, "resize"); }, 50);
-    setTimeout(() => {
-      if (!mapInstanceRef.current) return;
-      google.maps.event.trigger(mapInstanceRef.current, "resize");
-      // フォーカス対象がない場合だけ名古屋にリセット
-      if (!pendingFocusRef.current) {
-        infoWindowRef.current?.close();
-        mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
-        mapInstanceRef.current.setZoom(10);
-      }
-    }, 400);
-  }, [isVisible]);
 
-  // フォーカスID変化を監視：pendingに積んでおき、表示＆準備完了後に実行
-  useEffect(() => {
-    if (!focusCastleId) return;
-    pendingFocusRef.current = focusCastleId;
-    // すでにマップが表示済み＆準備完了なら即実行
-    if (mapReady && isVisible && mapInstanceRef.current) {
-      const id = focusCastleId;
+    // まず resize してグレー防止（DOMサイズ確定後）
+    google.maps.event.trigger(mapInstanceRef.current, "resize");
+
+    const targetId = focusCastleId || pendingFocusRef.current;
+
+    if (targetId) {
+      // フォーカス対象あり：名古屋リセットせずそのまま城へ
       pendingFocusRef.current = null;
-      // isVisibleのuseEffect(400ms)より後に実行して上書きされないようにする
-      setTimeout(() => executeFocus(id), 500);
+      const castle = castles.find((c: any) => c.id === targetId);
+      if (castle && castle.lat && castle.lng) {
+        mapInstanceRef.current.setCenter({ lat: castle.lat, lng: castle.lng });
+        mapInstanceRef.current.setZoom(14);
+        // マーカーはマップ移動後に描画されるので少し待つ
+        setTimeout(() => {
+          const marker = markersRef.current.find(m => (m as any)._castleId === targetId);
+          if (marker) openInfoWindow(castle, marker);
+        }, 400);
+      } else if (castle) {
+        // 座標なし→都道府県中心
+        const prefCoords = PREF_COORDS[castle.pref];
+        if (prefCoords) {
+          mapInstanceRef.current.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
+          mapInstanceRef.current.setZoom(11);
+        }
+      }
+      onFocusHandled?.();
+    } else {
+      // フォーカス対象なし：名古屋（初期位置）にリセット
+      infoWindowRef.current?.close();
+      mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
+      mapInstanceRef.current.setZoom(10);
+    }
+  }, [isVisible, mapReady, focusCastleId]);
+
+  // focusCastleId がセットされた時点でまだ非表示なら pending に積む
+  useEffect(() => {
+    if (focusCastleId && (!isVisible || !mapReady)) {
+      pendingFocusRef.current = focusCastleId;
     }
   }, [focusCastleId]);
-
-  // mapReady時にpendingがあれば実行
-  useEffect(() => {
-    if (!mapReady || !pendingFocusRef.current) return;
-    const id = pendingFocusRef.current;
-    pendingFocusRef.current = null;
-    setTimeout(() => executeFocus(id), 500);
-  }, [mapReady]);
-
-  const executeFocus = (id: string) => {
-    const castle = castles.find(c => c.id === id);
-    if (!castle || !mapInstanceRef.current) return;
-    const lat = castle.lat ?? null;
-    const lng = castle.lng ?? null;
-    if (lat && lng) {
-      mapInstanceRef.current.setCenter({ lat, lng });
-      mapInstanceRef.current.setZoom(14);
-      setTimeout(() => {
-        const marker = markersRef.current.find(m => (m as any)._castleId === id);
-        if (marker) openInfoWindow(castle, marker);
-      }, 300);
-    } else {
-      // 座標未設定の場合は都道府県中心に移動するだけ
-      const prefCoords = PREF_COORDS[castle.pref];
-      if (prefCoords) {
-        mapInstanceRef.current.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
-        mapInstanceRef.current.setZoom(11);
-      }
-    }
-    onFocusHandled?.();
-  };
 
   // ③ ポップアップ：×ボタンと城名同行、位置修正を★と同行
   const openInfoWindow = (castle: any, marker: any) => {
