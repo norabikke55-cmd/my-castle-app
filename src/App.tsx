@@ -397,25 +397,25 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
     executeFocus(id);
   }, [mapReady]);
 
-  const executeFocus = async (id: string) => {
+  const executeFocus = (id: string) => {
     const castle = castles.find(c => c.id === id);
     if (!castle || !mapInstanceRef.current) return;
-    let lat = castle.lat ?? null;
-    let lng = castle.lng ?? null;
-    if (!lat || !lng) {
-      const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
-      if (coords) { lat = coords.lat; lng = coords.lng; }
-    }
+    const lat = castle.lat ?? null;
+    const lng = castle.lng ?? null;
     if (lat && lng) {
       mapInstanceRef.current.setCenter({ lat, lng });
       mapInstanceRef.current.setZoom(14);
       setTimeout(() => {
         const marker = markersRef.current.find(m => (m as any)._castleId === id);
         if (marker) openInfoWindow(castle, marker);
-      }, 600);
+      }, 300);
     } else {
-      const coords = PREF_COORDS[castle.pref];
-      if (coords) { mapInstanceRef.current.setCenter({ lat: coords[0], lng: coords[1] }); mapInstanceRef.current.setZoom(11); }
+      // 座標未設定の場合は都道府県中心に移動するだけ
+      const prefCoords = PREF_COORDS[castle.pref];
+      if (prefCoords) {
+        mapInstanceRef.current.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
+        mapInstanceRef.current.setZoom(11);
+      }
     }
     onFocusHandled?.();
   };
@@ -1340,21 +1340,40 @@ export default function App() {
               </button>
               {/* 既存データ一括座標付与 */}
               <button onClick={async () => {
+                const google = (window as any).google;
+                if (!google?.maps) { alert("マップページを一度開いてから実行してください"); return; }
                 const targets = castles.filter(c => !c.manualCoord && (!c.lat || !c.lng));
                 if (targets.length === 0) { alert("座標未設定のデータはありません"); return; }
                 if (!window.confirm(`座標が未設定の ${targets.length} 件にGoogle座標を付与します。\n時間がかかる場合があります。実行しますか？`)) return;
                 setShowSettings(false);
+                const geocoder = new google.maps.Geocoder();
+                const geocodeOne = (query: string, pref: string): Promise<{lat:number,lng:number}|null> =>
+                  new Promise(resolve => {
+                    geocoder.geocode({ address: query, region: "jp" }, (results: any, status: any) => {
+                      if (status === "OK" && results?.[0]) {
+                        const loc = results[0].geometry.location;
+                        const lat = loc.lat(), lng = loc.lng();
+                        if (isInJapan(lat, lng) && (!pref || isInPref(lat, lng, pref))) {
+                          resolve({ lat, lng });
+                        } else { resolve(null); }
+                      } else { resolve(null); }
+                    });
+                  });
                 let success = 0, fail = 0;
                 for (const castle of targets) {
-                  const coords = await resolveCoords(castle.name, castle.address || "", castle.pref || "");
+                  const addr = castle.address || "";
+                  const pref = castle.pref || "";
+                  const name = castle.name || "";
+                  let coords: {lat:number,lng:number}|null = null;
+                  if (addr) coords = await geocodeOne(pref && !addr.startsWith(pref) ? pref+addr : addr, pref);
+                  if (!coords && pref) coords = await geocodeOne(`${pref} ${name}`, pref);
+                  if (!coords) coords = await geocodeOne(name, pref);
                   const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", castle.id);
                   if (coords) {
                     await setDoc(ref, { ...castle, lat: coords.lat, lng: coords.lng, updatedAt: new Date().toISOString() });
                     success++;
-                  } else {
-                    fail++;
-                  }
-                  await new Promise(r => setTimeout(r, 200)); // API負荷軽減
+                  } else { fail++; }
+                  await new Promise(r => setTimeout(r, 300));
                 }
                 alert(`座標付与完了\n成功: ${success} 件 / 失敗: ${fail} 件`);
               }} className="w-full flex items-center justify-between p-6 bg-stone-50 rounded-[24px] font-black text-sm hover:bg-stone-100 transition-all">
