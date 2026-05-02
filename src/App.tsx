@@ -98,30 +98,44 @@ const isInPref = (lat: number, lng: number, pref: string): boolean => {
 const isInJapan = (lat: number, lng: number): boolean =>
   lat >= 24 && lat <= 46 && lng >= 122 && lng <= 154;
 
-// 座標取得のメイン関数（Google専用・シンプル版）
-// 住所優先 → 都道府県+城名 → 城名のみ の順で最大3回だけ試行
-const resolveCoords = async (name: string, address: string, pref: string): Promise<{ lat: number; lng: number } | null> => {
-  const valid = (c: { lat: number; lng: number } | null) =>
-    c && isInJapan(c.lat, c.lng) && (pref ? isInPref(c.lat, c.lng, pref) : true);
+// 座標取得のメイン関数（ブラウザSDK版・HTTPリファラー制限を回避）
+// REST APIではなく google.maps.Geocoder を使用
+const resolveCoords = (name: string, address: string, pref: string): Promise<{ lat: number; lng: number } | null> => {
+  return new Promise((resolve) => {
+    const google = (window as any).google;
+    // SDKが未初期化の場合はnullを返す（マップページを開いてから保存する必要あり）
+    if (!google?.maps?.Geocoder) { resolve(null); return; }
 
-  // 1. 住所で検索（最優先）
-  if (address) {
-    const query = (pref && !address.startsWith(pref)) ? `${pref}${address}` : address;
-    const result = await fetchCoordsFromGoogleGeocoding(query);
-    if (valid(result)) return result!;
-  }
+    const geocoder = new google.maps.Geocoder();
+    const geocodeOne = (query: string): Promise<{ lat: number; lng: number } | null> =>
+      new Promise(res => {
+        geocoder.geocode({ address: query, region: "jp" }, (results: any, status: any) => {
+          if (status === "OK" && results?.[0]) {
+            const loc = results[0].geometry.location;
+            const lat = loc.lat(), lng = loc.lng();
+            // isInPrefチェックを外し、日本国内かどうかだけ確認（境界ギリギリを弾かない）
+            if (isInJapan(lat, lng)) res({ lat, lng });
+            else res(null);
+          } else res(null);
+        });
+      });
 
-  // 2. 都道府県 + 城名で検索
-  if (pref) {
-    const result = await fetchCoordsFromGoogleGeocoding(`${pref} ${name}`);
-    if (valid(result)) return result!;
-  }
-
-  // 3. 城名のみで検索（最終手段）
-  const result = await fetchCoordsFromGoogleGeocoding(name);
-  if (valid(result)) return result!;
-
-  return null;
+    // 都道府県+城名 → 住所 → 城名のみ の順で試行
+    // GoogleマップのPOIを最優先（城名で登録されているケースが多い）
+    (async () => {
+      if (pref) {
+        const r = await geocodeOne(`${pref} ${name}`);
+        if (r) { resolve(r); return; }
+      }
+      if (address) {
+        const query = (pref && !address.startsWith(pref)) ? `${pref}${address}` : address;
+        const r = await geocodeOne(query);
+        if (r) { resolve(r); return; }
+      }
+      const r = await geocodeOne(name);
+      resolve(r);
+    })();
+  });
 };
 const MAX_BYTES = 50 * 1024;
 
@@ -440,6 +454,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
   const coordMapInstanceRef = useRef<any>(null);
   const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const pendingFocusRef = useRef<string | null>(null);
+  const geocodedWishIdsRef = useRef<Set<string>>(new Set()); // ジオコード済みwish IDを記録（ループ防止）
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
 
   // Google Maps 初期化
@@ -662,13 +677,27 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
         });
         wMarker.addListener("click", () => {
           const iw = infoWindowRef.current; if (!iw) return;
-          iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:100px">
+          iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
             <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
             <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
             ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
             ${wish.address ? `<div style="font-size:10px;color:#9ca3af">${wish.address}</div>` : ""}
+            <div style="margin-top:6px">
+              <span id="iw-wish-edit-${wish.id}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">位置修正</span>
+            </div>
           </div>`);
           iw.open(mapInstanceRef.current, wMarker);
+          // 位置修正ボタンのクリックイベント（DOM生成後に登録）
+          google.maps.event.addListenerOnce(iw, "domready", () => {
+            const btn = document.getElementById(`iw-wish-edit-${wish.id}`);
+            if (btn) btn.addEventListener("click", () => {
+              iw.close();
+              const lat = wMarker.getPosition()?.lat() ?? wish.lat;
+              const lng = wMarker.getPosition()?.lng() ?? wish.lng;
+              setCoordLatLng(lat && lng ? { lat, lng } : null);
+              setEditingCoord({ ...wish, _collection: "wishes" });
+            });
+          });
         });
         (wMarker as any)._wishId = wish.id;
         markersRef.current.push(wMarker);
@@ -684,18 +713,22 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
           const query = wish.address
             ? (wish.pref && !wish.address.startsWith(wish.pref) ? wish.pref + wish.address : wish.address)
             : `${wish.pref} ${wish.name}`;
+          // すでにジオコード済みならスキップ（DBへの保存→wishes更新→再実行のループ防止）
+          if (geocodedWishIdsRef.current.has(wish.id)) return;
+          geocodedWishIdsRef.current.add(wish.id);
           geocoder.geocode({ address: query, region: "jp" }, async (results: any, status: any) => {
             if (status === "OK" && results?.[0]) {
               const loc = results[0].geometry.location;
               const lat = loc.lat(), lng = loc.lng();
               placeWishMarker(wish, lat, lng);
-              // 取得した座標をDBに保存（次回から即表示）
+              // 取得した座標をDBに保存（次回から座標ありとして即表示）
               try {
                 const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", wish.id);
                 await setDoc(ref, { ...wish, lat, lng, updatedAt: new Date().toISOString() });
               } catch (e) { console.error("wish座標保存失敗", e); }
             } else {
               // ジオコード失敗時は都道府県中心にフォールバック（DBには保存しない）
+              geocodedWishIdsRef.current.delete(wish.id); // 失敗時はRefから削除して次回再試行可能に
               const coords = PREF_COORDS[wish.pref];
               if (coords) {
                 const h = stableHash(wish.id || wish.name);
@@ -838,8 +871,12 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
               )}
               <button onClick={async () => {
                 if (!coordLatLng) return;
-                const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingCoord.id);
-                await setDoc(ref, { ...editingCoord, lat: coordLatLng.lat, lng: coordLatLng.lng, manualCoord: true, updatedAt: new Date().toISOString() });
+                const col = editingCoord._collection || "castles";
+                const { _collection, ...saveData } = editingCoord;
+                const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, col, saveData.id);
+                await setDoc(ref, { ...saveData, lat: coordLatLng.lat, lng: coordLatLng.lng, manualCoord: true, updatedAt: new Date().toISOString() });
+                // wishの場合はジオコード済みキャッシュをクリアして次回再表示に備える
+                if (col === "wishes") geocodedWishIdsRef.current.delete(saveData.id);
                 setEditingCoord(null); setCoordLatLng(null);
               }} className="w-full bg-[#B7410E] text-white py-3 rounded-[18px] font-black text-sm hover:bg-[#9a3509] transition-all">
                 この位置で保存
@@ -1112,20 +1149,23 @@ export default function App() {
 
       // 手動修正済みの座標は上書きしない
       const isManual = formData.manualCoord === true;
-
-      // manualCoord:false の場合は毎回再取得（過去の誤座標も修正される）
       const needsGeocode = !isManual;
 
       let lat = formData.lat;
       let lng = formData.lng;
 
       if (needsGeocode) {
-        const coords = await resolveCoords(formData.name, formData.address, formData.pref);
-        if (coords) {
-          lat = coords.lat; lng = coords.lng;
-        } else {
-          // 座標が取れなかった場合、既存の誤座標もクリア
+        const google = (window as any).google;
+        if (!google?.maps?.Geocoder) {
+          // SDKが未初期化（マップページを一度も開いていない）→座標なしで保存
           lat = null; lng = null;
+        } else {
+          const coords = await resolveCoords(formData.name, formData.address, formData.pref);
+          if (coords) {
+            lat = coords.lat; lng = coords.lng;
+          } else {
+            lat = null; lng = null;
+          }
         }
       }
 
