@@ -657,8 +657,8 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
             <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.3)"/>
           </filter>
           <path d="M24 0C13.5 0 5 8.5 5 19c0 14 19 39 19 39s19-25 19-39C43 8.5 34.5 0 24 0z"
-            fill="#9ca3af" stroke="#fff" stroke-width="2.5" filter="url(#ws)"/>
-          <circle cx="24" cy="19" r="11" fill="rgba(255,255,255,0.85)"/>
+            fill="#16a34a" stroke="#fff" stroke-width="2.5" filter="url(#ws)"/>
+          <circle cx="24" cy="19" r="11" fill="rgba(255,255,255,0.9)"/>
           <text x="24" y="24" text-anchor="middle" font-size="12">${emoji}</text>
         </svg>`;
         const wUrl = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svgWish);
@@ -1454,6 +1454,14 @@ export default function App() {
             }, 300);
           }} focusCastleId={focusCastleId} onFocusHandled={() => setFocusCastleId(null)}
           isVisible={currentPage === "map"} />
+          {/* 凡例 */}
+          {currentPage === "map" && (
+            <div className="absolute bottom-16 left-3 z-[10] bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 text-[10px] font-black text-stone-600 space-y-1 pointer-events-none">
+              <div className="flex items-center gap-1.5"><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#B7410E"}}></span>訪問済み城郭</div>
+              <div className="flex items-center gap-1.5"><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#7c6a56"}}></span>古戦場</div>
+              <div className="flex items-center gap-1.5"><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#16a34a"}}></span>行きたい</div>
+            </div>
+          )}
         </div>
         {currentPage === "wishlist" && (
           <WishlistPage
