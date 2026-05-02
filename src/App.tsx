@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  collection, onSnapshot, doc, deleteDoc, setDoc, writeBatch
+  collection, onSnapshot, doc, deleteDoc, setDoc
 } from 'firebase/firestore';
 import {
   Search, Calendar, Trash2, Plus, Star, X, Settings,
-  Edit3, MapPin, Download, FileUp, ExternalLink,
+  Edit3, MapPin, Download, ExternalLink,
   Loader2, ArrowUp, ArrowDown, LayoutList, Flag, Map,
   Camera, XCircle, Heart, CheckCircle, Sword
 , BarChart2 } from 'lucide-react';
@@ -66,33 +66,6 @@ const jaSort = (a: string, b: string) =>
   (a || "").localeCompare(b || "", "ja", { sensitivity: "base" });
 
 // ─── 座標取得ユーティリティ ────────────────────────────
-
-// 都道府県ごとの緯度経度の大まかな範囲（lat_min, lat_max, lng_min, lng_max）
-const PREF_BOUNDS: Record<string, [number, number, number, number]> = {
-  "北海道":[41.3,45.6,139.3,145.9],"青森県":[40.1,41.6,139.8,141.7],"岩手県":[38.7,40.5,140.6,142.1],
-  "宮城県":[37.7,39.0,140.2,141.7],"秋田県":[38.9,40.5,139.6,141.1],"山形県":[37.7,39.1,139.6,140.9],
-  "福島県":[36.8,37.9,136.8,141.1],"茨城県":[35.7,36.9,139.7,140.9],"栃木県":[36.2,37.2,139.3,140.4],
-  "群馬県":[35.9,37.1,138.4,139.7],"埼玉県":[35.7,36.3,138.7,139.9],"千葉県":[35.0,35.9,139.7,140.9],
-  "東京都":[35.5,35.9,138.9,139.9],"神奈川県":[35.1,35.7,139.0,139.8],"新潟県":[36.7,38.7,137.6,139.9],
-  "富山県":[36.4,36.9,136.8,137.7],"石川県":[36.1,37.9,136.3,137.4],"福井県":[35.4,36.3,135.5,136.7],
-  "山梨県":[35.2,35.9,138.2,139.0],"長野県":[35.2,37.0,136.9,138.8],"岐阜県":[35.1,36.6,136.3,137.7],
-  "静岡県":[34.6,35.6,137.5,139.2],"愛知県":[34.6,35.4,136.7,137.8],"三重県":[33.7,35.2,135.9,136.9],
-  "滋賀県":[34.8,35.7,135.7,136.4],"京都府":[34.7,35.8,135.0,135.9],"大阪府":[34.3,34.9,135.1,135.8],
-  "兵庫県":[34.1,35.7,134.2,135.5],"奈良県":[33.9,34.8,135.6,136.3],"和歌山県":[33.4,34.4,135.1,136.0],
-  "鳥取県":[35.0,35.6,133.2,134.6],"島根県":[34.3,35.8,131.7,133.5],"岡山県":[34.3,35.3,133.2,134.5],
-  "広島県":[33.9,35.2,132.0,133.4],"山口県":[33.7,34.8,130.8,132.1],"徳島県":[33.5,34.3,133.7,134.8],
-  "香川県":[34.1,34.5,133.5,134.4],"愛媛県":[32.9,34.2,131.9,133.7],"高知県":[32.7,33.9,132.5,134.3],
-  "福岡県":[33.1,34.2,130.0,131.2],"佐賀県":[33.0,33.6,129.7,130.6],"長崎県":[32.5,34.7,128.6,130.3],
-  "熊本県":[32.0,33.2,130.1,131.4],"大分県":[32.7,33.7,130.7,132.1],"宮崎県":[31.4,32.9,130.7,132.1],
-  "鹿児島県":[30.0,32.3,129.3,131.3],"沖縄県":[24.0,27.1,122.9,131.4],
-};
-
-// 座標が指定都道府県の範囲内にあるかチェック
-const isInPref = (lat: number, lng: number, pref: string): boolean => {
-  const bounds = PREF_BOUNDS[pref];
-  if (!bounds) return true; // 範囲データなければスキップ
-  return lat >= bounds[0] && lat <= bounds[1] && lng >= bounds[2] && lng <= bounds[3];
-};
 
 // 日本国内の座標かチェック（おおよその範囲）
 const isInJapan = (lat: number, lng: number): boolean =>
@@ -283,16 +256,7 @@ const PrefecturePage = ({ castles, onCastleSelect }: { castles: any[]; onCastleS
 const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 // Google Geocoding API で住所から座標取得（高精度）
-const fetchCoordsFromGoogleGeocoding = async (query: string): Promise<{ lat: number; lng: number } | null> => {
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${GOOGLE_MAPS_API_KEY}&language=ja&region=jp`;
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.status !== "OK" || !data.results?.[0]) return null;
-    const loc = data.results[0].geometry.location;
-    return { lat: loc.lat, lng: loc.lng };
-  } catch { return null; }
-};
+// fetchCoordsFromGoogleGeocoding は resolveCoords(SDK版)に統合済み
 
 
 // ─── 統計ページ ────────────────────────────────────────
@@ -457,6 +421,10 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const pendingFocusRef = useRef<string | null>(null);
   const geocodedWishIdsRef = useRef<Set<string>>(new Set()); // ジオコード済みwish IDを記録（ループ防止）
+  const wishesRef = useRef<any[]>([]); // 最新wishesを常に参照（クロージャ問題回避）
+  useEffect(() => { wishesRef.current = wishes || []; }, [wishes]);
+  const castlesRef = useRef<any[]>([]); // 最新castlesを常に参照（クロージャ問題回避）
+  useEffect(() => { castlesRef.current = castles || []; }, [castles]);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
 
   // Google Maps 初期化
@@ -557,8 +525,8 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
           setTimeout(() => {
             const marker = markersRef.current.find(m => (m as any)._wishId === focusWishId);
             if (marker) {
-              const iw = infoWindowRef.current;
-              if (iw) iw.open(map, marker);
+              const latestWish = wishesRef.current.find((w: any) => w.id === focusWishId) || wish;
+              openWishInfoWindow(latestWish, marker);
             }
           }, 200);
         } else {
@@ -573,7 +541,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   // isVisible変化時：フォーカスなしでマップタブに来た時だけ名古屋にリセット
   useEffect(() => {
     if (!isVisible || !mapReady || !mapInstanceRef.current) return;
-    if (!focusCastleId && !pendingFocusRef.current) {
+    if (!focusCastleId && !focusWishId && !pendingFocusRef.current) {
       infoWindowRef.current?.close();
       mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
       mapInstanceRef.current.setZoom(10);
@@ -614,6 +582,39 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
     });
   };
 
+  // wish用ポップアップ表示（MapPageのメソッドとして定義・スコープ問題を解消）
+  const openWishInfoWindow = (wishData: any, wMarker: any) => {
+    const google = (window as any).google;
+    const iw = infoWindowRef.current; if (!iw || !mapInstanceRef.current) return;
+    const wishId = wishData.id;
+    iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
+      <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
+      <div style="font-weight:900;font-size:13px;color:#374151">${wishData.name}</div>
+      ${wishData.pref ? `<div style="font-size:11px;color:#6b7280">${wishData.pref}</div>` : ""}
+      ${wishData.address ? `<div style="font-size:10px;color:#9ca3af">${wishData.address}</div>` : ""}
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+        <span id="iw-wish-back-${wishId}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">一覧へ戻る</span>
+        <span id="iw-wish-edit-${wishId}" style="font-size:10px;color:#6b7280;cursor:pointer;text-decoration:underline">位置修正</span>
+      </div>
+    </div>`);
+    iw.open(mapInstanceRef.current, wMarker);
+    google.maps.event.addListenerOnce(iw, "domready", () => {
+      const backBtn = document.getElementById(`iw-wish-back-${wishId}`);
+      if (backBtn) backBtn.addEventListener("click", () => {
+        iw.close();
+        (window as any).__goToWishlist?.();
+      });
+      const editBtn = document.getElementById(`iw-wish-edit-${wishId}`);
+      if (editBtn) editBtn.addEventListener("click", () => {
+        iw.close();
+        const lat = wMarker.getPosition()?.lat() ?? wishData.lat;
+        const lng = wMarker.getPosition()?.lng() ?? wishData.lng;
+        setCoordLatLng(lat && lng ? { lat, lng } : null);
+        setEditingCoord({ ...wishData, _collection: "wishes" });
+      });
+    });
+  };
+
   // マーカー更新
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
@@ -622,8 +623,6 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
 
     const markerColor = (r: number) =>
       r >= 5 ? "#B7410E" : r >= 4 ? "#d97706" : r >= 3 ? "#7c6a56" : "#9ca3af";
-    const markerScale = (r: number) =>
-      r >= 5 ? 14 : r >= 4 ? 12 : r >= 3 ? 10 : 8;
 
     const term = mapSearch.trim().toLowerCase();
     const filtered = term
@@ -671,7 +670,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
         zIndex: rating * 10, // 高評価が手前に
       });
 
-      marker.addListener("click", () => openInfoWindow(castle, marker));
+      marker.addListener("click", () => { const latest = castlesRef.current.find((c: any) => c.id === castle.id) || castle; openInfoWindow(latest, marker); });
       (marker as any)._castleId = castle.id;
       markersRef.current.push(marker);
     });
@@ -699,29 +698,10 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
           icon: { url: wUrl, scaledSize: new google.maps.Size(34, 44), anchor: new google.maps.Point(17, 44) },
           title: wish.name, optimized: false, zIndex: 1,
         });
+        // クリック時は常にwishesRef（最新データ）から取得してポップアップ表示
         wMarker.addListener("click", () => {
-          const iw = infoWindowRef.current; if (!iw) return;
-          iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
-            <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
-            <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
-            ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
-            ${wish.address ? `<div style="font-size:10px;color:#9ca3af">${wish.address}</div>` : ""}
-            <div style="margin-top:6px">
-              <span id="iw-wish-edit-${wish.id}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">位置修正</span>
-            </div>
-          </div>`);
-          iw.open(mapInstanceRef.current, wMarker);
-          // 位置修正ボタンのクリックイベント（DOM生成後に登録）
-          google.maps.event.addListenerOnce(iw, "domready", () => {
-            const btn = document.getElementById(`iw-wish-edit-${wish.id}`);
-            if (btn) btn.addEventListener("click", () => {
-              iw.close();
-              const lat = wMarker.getPosition()?.lat() ?? wish.lat;
-              const lng = wMarker.getPosition()?.lng() ?? wish.lng;
-              setCoordLatLng(lat && lng ? { lat, lng } : null);
-              setEditingCoord({ ...wish, _collection: "wishes" });
-            });
-          });
+          const latestWish = (wishesRef.current || []).find((w: any) => w.id === wish.id) || wish;
+          openWishInfoWindow(latestWish, wMarker);
         });
         (wMarker as any)._wishId = wish.id;
         markersRef.current.push(wMarker);
@@ -1038,12 +1018,10 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isImporting, setIsImporting] = useState(false);
   const [currentPage, setCurrentPage] = useState<PageType>("list");
   const [recordTab, setRecordTab] = useState<RecordType>("castle");
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: "asc" | "desc" }>({ key: "visitDate", direction: "desc" });
   const [zoomedPhoto, setZoomedPhoto] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -1069,6 +1047,12 @@ export default function App() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [focusCastleId, setFocusCastleId] = useState<string | null>(null);
   const [focusWishId, setFocusWishId] = useState<string | null>(null);
+
+  // マップのwishポップアップから行きたい一覧へ戻るためのコールバック（windowグローバルを使わない安全な実装）
+  useEffect(() => {
+    (window as any).__goToWishlist = () => setCurrentPage("wishlist");
+    return () => { (window as any).__goToWishlist = null; };
+  }, [setCurrentPage]);
 
   // ─── Firestore 読み込み（④ キャッシュ優先：初回もキャッシュから即表示） ──
   useEffect(() => {
@@ -1287,42 +1271,7 @@ export default function App() {
     setIsWishFormOpen(true);
   };
 
-  // ─── CSV インポート ───────────────────────────────────
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
-    setIsImporting(true);
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const buf = ev.target!.result as ArrayBuffer;
-        let text = new TextDecoder("shift-jis").decode(buf);
-        if (!text.includes("城名")) text = new TextDecoder("utf-8").decode(buf);
-        const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-        if (lines.length < 2) throw new Error("データが足りません");
-        const header = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-        const fc = (keys: string[]) => header.findIndex((h) => keys.some((k) => h.includes(k)));
-        const col = { pref: fc(["都道府県"]), name: fc(["城名"]), aka: fc(["別名"]), prov: fc(["旧国"]), addr: fc(["住所"]), date: fc(["訪問日"]), memo: fc(["メモ"]) };
-        if (col.name === -1) throw new Error("「城名」の列が見つかりません");
-        const batch = writeBatch(db); let count = 0;
-        for (let i = 1; i < lines.length; i++) {
-          const cols = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((c) => c.replace(/^"|"$/g, ""));
-          const name = cols[col.name]; if (!name) continue;
-          const ref = doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
-          batch.set(ref, {
-            name, pref: col.pref !== -1 ? cols[col.pref] : "", aka: col.aka !== -1 ? cols[col.aka] : "",
-            province: col.prov !== -1 ? cols[col.prov] : "", address: col.addr !== -1 ? cols[col.addr] : "",
-            visitDate: col.date !== -1 ? cols[col.date].replace(/\//g, "-") : "",
-            battleYear: "", rating: 5, memo: col.memo !== -1 ? cols[col.memo] : "",
-            photo: "", recordType: "castle", updatedAt: new Date().toISOString(),
-          });
-          count++; if (count >= 450) break;
-        }
-        await batch.commit(); alert(`${count} 件をインポートしました！`); setShowSettings(false);
-      } catch (err: any) { alert(`エラー: ${err.message}`); }
-      finally { setIsImporting(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
-    };
-    reader.readAsArrayBuffer(file);
-  };
+
 
   const toggleSort = (key: string) =>
     setSortConfig((p) => ({ key, direction: p.key === key && p.direction === "desc" ? "asc" : "desc" }));
@@ -1625,18 +1574,7 @@ export default function App() {
           <div className="bg-white w-full max-w-sm rounded-[48px] shadow-2xl p-12 text-center">
             <h2 className="text-2xl font-black mb-10 text-stone-900">データ管理</h2>
             <div className="space-y-4">
-              <button disabled={isImporting} onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center justify-between p-6 bg-stone-50 rounded-[24px] font-black text-sm hover:bg-stone-100 transition-all">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 bg-white rounded-lg shadow-sm"><FileUp size={20} className="text-stone-800" /></div>
-                  <div className="text-left">
-                    <p className="text-stone-900">CSVを読み込む</p>
-                    <p className="text-[10px] text-stone-400 font-normal">230_castles.csv 対応</p>
-                  </div>
-                </div>
-                {isImporting ? <Loader2 size={18} className="animate-spin" /> : <ArrowUp size={16} className="text-stone-300" />}
-              </button>
-              <input type="file" accept=".csv" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+
               <button onClick={() => {
                 const header = "都道府県,城名,別名,旧国,住所,訪問日,合戦年,評価,メモ,種別\n";
                 const rows = castles.map((c) =>
@@ -1676,7 +1614,7 @@ export default function App() {
                       if (status === "OK" && results?.[0]) {
                         const loc = results[0].geometry.location;
                         const lat = loc.lat(), lng = loc.lng();
-                        if (isInJapan(lat, lng) && (!pref || isInPref(lat, lng, pref))) {
+                        if (isInJapan(lat, lng)) { // 都道府県境界チェック廃止（境界ギリギリを弾かないようisInJapanのみ）
                           resolve({ lat, lng });
                         } else { resolve(null); }
                       } else { resolve(null); }
