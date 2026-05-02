@@ -361,53 +361,43 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
     mapInstanceRef.current.setMapTypeId(mapType);
   }, [mapType]);
 
-  // ページ表示 + フォーカスを一本化
+  // フォーカス処理（display:noneをやめたのでresizeは不要。シンプルに城へ飛ぶだけ）
+  useEffect(() => {
+    if (!mapReady || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const targetId = focusCastleId || pendingFocusRef.current;
+    if (!targetId) return;
+
+    pendingFocusRef.current = null;
+    const castle = castles.find((c: any) => c.id === targetId);
+    if (!castle) { onFocusHandled?.(); return; }
+
+    if (castle.lat && castle.lng) {
+      map.setCenter({ lat: castle.lat, lng: castle.lng });
+      map.setZoom(14);
+      setTimeout(() => {
+        const marker = markersRef.current.find(m => (m as any)._castleId === targetId);
+        if (marker) openInfoWindow(castle, marker);
+      }, 200);
+    } else {
+      const prefCoords = PREF_COORDS[castle.pref];
+      if (prefCoords) {
+        map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
+        map.setZoom(11);
+      }
+    }
+    onFocusHandled?.();
+  }, [focusCastleId, mapReady]);
+
+  // isVisible変化時：フォーカスなしでマップタブに来た時だけ名古屋にリセット
   useEffect(() => {
     if (!isVisible || !mapReady || !mapInstanceRef.current) return;
-    const google = (window as any).google;
-    const map = mapInstanceRef.current;
-
-    const targetId = focusCastleId || pendingFocusRef.current;
-
-    if (targetId) {
-      pendingFocusRef.current = null;
-      const castle = castles.find((c: any) => c.id === targetId);
-      if (castle && castle.lat && castle.lng) {
-        // 先にcenterとzoomをセットしてからresizeする（名古屋が一瞬見えるのを防ぐ）
-        map.setCenter({ lat: castle.lat, lng: castle.lng });
-        map.setZoom(14);
-        google.maps.event.trigger(map, "resize");
-        map.setCenter({ lat: castle.lat, lng: castle.lng }); // resize後に再セット
-        setTimeout(() => {
-          const marker = markersRef.current.find(m => (m as any)._castleId === targetId);
-          if (marker) openInfoWindow(castle, marker);
-        }, 350);
-      } else if (castle) {
-        const prefCoords = PREF_COORDS[castle.pref];
-        if (prefCoords) {
-          map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
-          map.setZoom(11);
-          google.maps.event.trigger(map, "resize");
-          map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
-        }
-      }
-      onFocusHandled?.();
-    } else {
-      // フォーカスなし：初期位置にリセット
+    if (!focusCastleId && !pendingFocusRef.current) {
       infoWindowRef.current?.close();
-      map.setCenter({ lat: 35.180, lng: 136.907 });
-      map.setZoom(10);
-      google.maps.event.trigger(map, "resize");
-      map.setCenter({ lat: 35.180, lng: 136.907 });
+      mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
+      mapInstanceRef.current.setZoom(10);
     }
-  }, [isVisible, mapReady, focusCastleId]);
-
-  // focusCastleId がセットされた時点でまだ非表示なら pending に積む
-  useEffect(() => {
-    if (focusCastleId && (!isVisible || !mapReady)) {
-      pendingFocusRef.current = focusCastleId;
-    }
-  }, [focusCastleId]);
+  }, [isVisible]);
 
   // ③ ポップアップ：×ボタンと城名同行、位置修正を★と同行
   const openInfoWindow = (castle: any, marker: any) => {
@@ -1236,8 +1226,14 @@ export default function App() {
         )}
 
         {currentPage === "prefecture" && <PrefecturePage castles={castles} />}
-        {/* マップは常時レンダリング（ページ切替でリセットされないよう） */}
-        <div style={{ display: currentPage === "map" ? "block" : "none" }}>
+        {/* マップは常時レンダリング・display:noneを使わない（サイズ0になりグレーになるため） */}
+        <div style={{
+          position: currentPage === "map" ? "relative" : "fixed",
+          visibility: currentPage === "map" ? "visible" : "hidden",
+          pointerEvents: currentPage === "map" ? "auto" : "none",
+          width: "100%", height: currentPage === "map" ? "auto" : "100vh",
+          top: currentPage === "map" ? "auto" : "-9999px",
+        }}>
           <MapPage castles={castles} onCastleSelect={(castle) => {
             setCurrentPage("list");
             setRecordTab(castle.recordType || "castle");
