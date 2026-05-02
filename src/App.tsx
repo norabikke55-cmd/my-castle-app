@@ -457,6 +457,10 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const pendingFocusRef = useRef<string | null>(null);
   const geocodedWishIdsRef = useRef<Set<string>>(new Set()); // ジオコード済みwish IDを記録（ループ防止）
+  const wishesRef = useRef<any[]>([]); // 最新wishesを常に参照（クロージャ問題回避）
+  useEffect(() => { wishesRef.current = wishes || []; }, [wishes]);
+  const castlesRef = useRef<any[]>([]); // 最新castlesを常に参照（クロージャ問題回避）
+  useEffect(() => { castlesRef.current = castles || []; }, [castles]);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
 
   // Google Maps 初期化
@@ -556,36 +560,9 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
           map.setZoom(14);
           setTimeout(() => {
             const marker = markersRef.current.find(m => (m as any)._wishId === focusWishId);
-            if (marker && infoWindowRef.current) {
-              infoWindowRef.current.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
-                <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
-                <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
-                ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
-                ${wish.address ? `<div style="font-size:10px;color:#9ca3af">${wish.address}</div>` : ""}
-                <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
-                  <span id="iw-wish-back-${wish.id}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">一覧へ戻る</span>
-                  <span id="iw-wish-edit2-${wish.id}" style="font-size:10px;color:#6b7280;cursor:pointer;text-decoration:underline">位置修正</span>
-                </div>
-              </div>`);
-              infoWindowRef.current.open(map, marker);
-              const google = (window as any).google;
-              google.maps.event.addListenerOnce(infoWindowRef.current, "domready", () => {
-                const backBtn = document.getElementById(`iw-wish-back-${wish.id}`);
-                if (backBtn) backBtn.addEventListener("click", () => {
-                  infoWindowRef.current?.close();
-                  onFocusHandled?.();
-                  // 行きたい一覧ページへ遷移（onCastleSelectを流用してwishlistページへ）
-                  (window as any).__goToWishlist?.();
-                });
-                const editBtn = document.getElementById(`iw-wish-edit2-${wish.id}`);
-                if (editBtn) editBtn.addEventListener("click", () => {
-                  infoWindowRef.current?.close();
-                  const lat = marker.getPosition()?.lat() ?? wish.lat;
-                  const lng = marker.getPosition()?.lng() ?? wish.lng;
-                  setCoordLatLng(lat && lng ? { lat, lng } : null);
-                  setEditingCoord({ ...wish, _collection: "wishes" });
-                });
-              });
+            if (marker) {
+              const latestWish = wishesRef.current.find((w: any) => w.id === focusWishId) || wish;
+              openWishInfoWindow(latestWish, marker);
             }
           }, 200);
         } else {
@@ -698,7 +675,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
         zIndex: rating * 10, // 高評価が手前に
       });
 
-      marker.addListener("click", () => openInfoWindow(castle, marker));
+      marker.addListener("click", () => { const latest = castlesRef.current.find((c: any) => c.id === castle.id) || castle; openInfoWindow(latest, marker); });
       (marker as any)._castleId = castle.id;
       markersRef.current.push(marker);
     });
@@ -708,6 +685,38 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
       const wishFiltered = term
         ? wishes.filter((w: any) => (w.name+(w.pref||"")).toLowerCase().includes(term))
         : wishes;
+
+      // wish用ポップアップ表示（クリック時・フォーカス時共通）
+      const openWishInfoWindow = (wishData: any, wMarker: any) => {
+        const iw = infoWindowRef.current; if (!iw) return;
+        const wishId = wishData.id;
+        iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
+          <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
+          <div style="font-weight:900;font-size:13px;color:#374151">${wishData.name}</div>
+          ${wishData.pref ? `<div style="font-size:11px;color:#6b7280">${wishData.pref}</div>` : ""}
+          ${wishData.address ? `<div style="font-size:10px;color:#9ca3af">${wishData.address}</div>` : ""}
+          <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+            <span id="iw-wish-back-${wishId}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">一覧へ戻る</span>
+            <span id="iw-wish-edit-${wishId}" style="font-size:10px;color:#6b7280;cursor:pointer;text-decoration:underline">位置修正</span>
+          </div>
+        </div>`);
+        iw.open(mapInstanceRef.current, wMarker);
+        google.maps.event.addListenerOnce(iw, "domready", () => {
+          const backBtn = document.getElementById(`iw-wish-back-${wishId}`);
+          if (backBtn) backBtn.addEventListener("click", () => {
+            iw.close();
+            (window as any).__goToWishlist?.();
+          });
+          const editBtn = document.getElementById(`iw-wish-edit-${wishId}`);
+          if (editBtn) editBtn.addEventListener("click", () => {
+            iw.close();
+            const lat = wMarker.getPosition()?.lat() ?? wishData.lat;
+            const lng = wMarker.getPosition()?.lng() ?? wishData.lng;
+            setCoordLatLng(lat && lng ? { lat, lng } : null);
+            setEditingCoord({ ...wishData, _collection: "wishes" });
+          });
+        });
+      };
 
       const placeWishMarker = (wish: any, lat: number, lng: number) => {
         const emoji = wish.wishType === "battlefield" ? "⚔️" : "🏯";
@@ -726,29 +735,10 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
           icon: { url: wUrl, scaledSize: new google.maps.Size(34, 44), anchor: new google.maps.Point(17, 44) },
           title: wish.name, optimized: false, zIndex: 1,
         });
+        // クリック時は常にwishesRef（最新データ）から取得してポップアップ表示
         wMarker.addListener("click", () => {
-          const iw = infoWindowRef.current; if (!iw) return;
-          iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
-            <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
-            <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
-            ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
-            ${wish.address ? `<div style="font-size:10px;color:#9ca3af">${wish.address}</div>` : ""}
-            <div style="margin-top:6px">
-              <span id="iw-wish-edit-${wish.id}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">位置修正</span>
-            </div>
-          </div>`);
-          iw.open(mapInstanceRef.current, wMarker);
-          // 位置修正ボタンのクリックイベント（DOM生成後に登録）
-          google.maps.event.addListenerOnce(iw, "domready", () => {
-            const btn = document.getElementById(`iw-wish-edit-${wish.id}`);
-            if (btn) btn.addEventListener("click", () => {
-              iw.close();
-              const lat = wMarker.getPosition()?.lat() ?? wish.lat;
-              const lng = wMarker.getPosition()?.lng() ?? wish.lng;
-              setCoordLatLng(lat && lng ? { lat, lng } : null);
-              setEditingCoord({ ...wish, _collection: "wishes" });
-            });
-          });
+          const latestWish = (wishesRef.current || []).find((w: any) => w.id === wish.id) || wish;
+          openWishInfoWindow(latestWish, wMarker);
         });
         (wMarker as any)._wishId = wish.id;
         markersRef.current.push(wMarker);
