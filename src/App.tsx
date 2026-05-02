@@ -99,21 +99,22 @@ const isInJapan = (lat: number, lng: number): boolean =>
   lat >= 24 && lat <= 46 && lng >= 122 && lng <= 154;
 
 // 座標取得のメイン関数（ブラウザSDK版・HTTPリファラー制限を回避）
-// REST APIではなく google.maps.Geocoder を使用
 const resolveCoords = (name: string, address: string, pref: string): Promise<{ lat: number; lng: number } | null> => {
   return new Promise((resolve) => {
     const google = (window as any).google;
-    // SDKが未初期化の場合はnullを返す（マップページを開いてから保存する必要あり）
     if (!google?.maps?.Geocoder) { resolve(null); return; }
 
     const geocoder = new google.maps.Geocoder();
+
+    // タイムアウト付きのジオコード（5秒で諦めてnullを返す）
     const geocodeOne = (query: string): Promise<{ lat: number; lng: number } | null> =>
       new Promise(res => {
+        const timer = setTimeout(() => res(null), 5000); // 5秒タイムアウト
         geocoder.geocode({ address: query, region: "jp" }, (results: any, status: any) => {
+          clearTimeout(timer);
           if (status === "OK" && results?.[0]) {
             const loc = results[0].geometry.location;
             const lat = loc.lat(), lng = loc.lng();
-            // isInPrefチェックを外し、日本国内かどうかだけ確認（境界ギリギリを弾かない）
             if (isInJapan(lat, lng)) res({ lat, lng });
             else res(null);
           } else res(null);
@@ -121,7 +122,6 @@ const resolveCoords = (name: string, address: string, pref: string): Promise<{ l
       });
 
     // 都道府県+城名 → 住所 → 城名のみ の順で試行
-    // GoogleマップのPOIを最優先（城名で登録されているケースが多い）
     (async () => {
       if (pref) {
         const r = await geocodeOne(`${pref} ${name}`);
@@ -133,7 +133,7 @@ const resolveCoords = (name: string, address: string, pref: string): Promise<{ l
         if (r) { resolve(r); return; }
       }
       const r = await geocodeOne(name);
-      resolve(r);
+      resolve(r ?? null);
     })();
   });
 };
@@ -1157,15 +1157,16 @@ export default function App() {
       if (needsGeocode) {
         const google = (window as any).google;
         if (!google?.maps?.Geocoder) {
-          // SDKが未初期化（マップページを一度も開いていない）→座標なしで保存
           lat = null; lng = null;
         } else {
-          const coords = await resolveCoords(formData.name, formData.address, formData.pref);
-          if (coords) {
-            lat = coords.lat; lng = coords.lng;
-          } else {
-            lat = null; lng = null;
-          }
+          try {
+            // 15秒で強制終了するタイムアウトを設定
+            const coordsPromise = resolveCoords(formData.name, formData.address, formData.pref);
+            const timeoutPromise = new Promise<null>(res => setTimeout(() => res(null), 15000));
+            const coords = await Promise.race([coordsPromise, timeoutPromise]);
+            if (coords) { lat = coords.lat; lng = coords.lng; }
+            else { lat = null; lng = null; }
+          } catch { lat = null; lng = null; }
         }
       }
 
