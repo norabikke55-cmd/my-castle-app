@@ -7,13 +7,13 @@ import {
   Edit3, MapPin, Download, FileUp, ExternalLink,
   Loader2, ArrowUp, ArrowDown, LayoutList, Flag, Map,
   Camera, XCircle, Heart, CheckCircle, Sword
-} from 'lucide-react';
+, BarChart2 } from 'lucide-react';
 import { db, appId } from "./firebase";
 
 // ─── 定数 ──────────────────────────────────────────────
 const FIXED_USER_ID = "toshiyuki";
 
-type PageType = "list" | "prefecture" | "map" | "wishlist";
+type PageType = "list" | "prefecture" | "map" | "wishlist" | "stats";
 type RecordType = "castle" | "battlefield";
 type WishPriority = "高" | "中" | "低";
 type WishSortKey = "pref" | "priority";
@@ -279,8 +279,150 @@ const fetchCoordsFromGoogleGeocoding = async (query: string): Promise<{ lat: num
   } catch { return null; }
 };
 
-const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVisible }: {
+
+// ─── 統計ページ ────────────────────────────────────────
+const StatsPage = ({ castles }: { castles: any[] }) => {
+  const visited = castles.filter(c => c.recordType !== "battlefield");
+  const battlefields = castles.filter(c => c.recordType === "battlefield");
+
+  // 訪問年別集計
+  const yearData = useMemo(() => {
+    const map: Record<string, { castle: number; battlefield: number }> = {};
+    castles.forEach(c => {
+      const raw = c.visitDate || "";
+      const year = raw.slice(0, 4);
+      if (!year || isNaN(Number(year)) || Number(year) < 1990) return;
+      if (!map[year]) map[year] = { castle: 0, battlefield: 0 };
+      if (c.recordType === "battlefield") map[year].battlefield++;
+      else map[year].castle++;
+    });
+    return Object.entries(map).sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, v]) => ({ year, ...v, total: v.castle + v.battlefield }));
+  }, [castles]);
+
+  const maxYear = Math.max(...yearData.map(d => d.total), 1);
+
+  // 評価分布
+  const ratingData = useMemo(() => {
+    const map: Record<number, number> = {1:0,2:0,3:0,4:0,5:0};
+    visited.forEach(c => { const r = c.rating || 3; if (map[r] !== undefined) map[r]++; });
+    return Object.entries(map).map(([r, count]) => ({ rating: Number(r), count }));
+  }, [visited]);
+  const maxRating = Math.max(...ratingData.map(d => d.count), 1);
+
+  // 都道府県TOP5
+  const prefTop = useMemo(() => {
+    const map: Record<string, number> = {};
+    visited.forEach(c => { if (c.pref) map[c.pref] = (map[c.pref] || 0) + 1; });
+    return Object.entries(map).sort(([,a],[,b]) => b - a).slice(0, 5);
+  }, [visited]);
+  const maxPref = Math.max(...prefTop.map(([,v]) => v), 1);
+
+  const ratingColors: Record<number,string> = {1:"#9ca3af",2:"#6b7280",3:"#7c6a56",4:"#d97706",5:"#B7410E"};
+
+  return (
+    <div className="space-y-6 pb-24">
+      {/* サマリーカード */}
+      <div className="grid grid-cols-2 gap-3">
+        {[
+          { label: "訪問城郭", value: visited.length, unit: "城", color: "#B7410E", emoji: "🏯" },
+          { label: "古戦場", value: battlefields.length, unit: "箇所", color: "#7c6a56", emoji: "⚔️" },
+          { label: "訪問都道府県", value: new Set(visited.map(c=>c.pref).filter(Boolean)).size, unit: "県", color: "#d97706", emoji: "🗾" },
+          { label: "5つ星の城", value: visited.filter(c=>c.rating===5).length, unit: "城", color: "#f59e0b", emoji: "⭐" },
+        ].map(({ label, value, unit, color, emoji }) => (
+          <div key={label} className="bg-white rounded-[20px] p-4 shadow-sm border border-stone-100">
+            <div className="text-2xl mb-1">{emoji}</div>
+            <div className="text-2xl font-black" style={{ color }}>{value}<span className="text-sm font-normal text-stone-400 ml-1">{unit}</span></div>
+            <div className="text-[11px] text-stone-400 font-black">{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 訪問年グラフ */}
+      {yearData.length > 0 && (
+        <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
+          <h3 className="font-black text-stone-800 mb-4 text-sm">📅 訪問年別</h3>
+          <div className="space-y-2">
+            {yearData.map(({ year, castle, battlefield, total }) => (
+              <div key={year} className="flex items-center gap-3">
+                <div className="text-[11px] font-black text-stone-500 w-10 shrink-0">{year}</div>
+                <div className="flex-1 flex gap-0.5 h-6 rounded overflow-hidden bg-stone-50">
+                  {castle > 0 && (
+                    <div className="h-full flex items-center justify-end pr-1 transition-all"
+                      style={{ width: `${(castle/maxYear)*100}%`, background: "#B7410E", minWidth: castle > 0 ? "20px" : "0" }}>
+                      <span className="text-white text-[9px] font-black">{castle}</span>
+                    </div>
+                  )}
+                  {battlefield > 0 && (
+                    <div className="h-full flex items-center justify-end pr-1 transition-all"
+                      style={{ width: `${(battlefield/maxYear)*100}%`, background: "#7c6a56", minWidth: battlefield > 0 ? "20px" : "0" }}>
+                      <span className="text-white text-[9px] font-black">{battlefield}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-[11px] font-black text-stone-600 w-6 shrink-0">{total}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-4 mt-3">
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm" style={{background:"#B7410E"}}></div><span className="text-[10px] text-stone-400">城郭</span></div>
+            <div className="flex items-center gap-1"><div className="w-3 h-3 rounded-sm" style={{background:"#7c6a56"}}></div><span className="text-[10px] text-stone-400">古戦場</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* 評価分布 */}
+      <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
+        <h3 className="font-black text-stone-800 mb-4 text-sm">⭐ 評価分布</h3>
+        <div className="space-y-2">
+          {ratingData.slice().reverse().map(({ rating, count }) => (
+            <div key={rating} className="flex items-center gap-3">
+              <div className="flex shrink-0">
+                {[1,2,3,4,5].map(n => (
+                  <span key={n} style={{ color: n <= rating ? ratingColors[rating] : "#e5e7eb", fontSize: "13px" }}>★</span>
+                ))}
+              </div>
+              <div className="flex-1 bg-stone-50 rounded overflow-hidden h-5">
+                <div className="h-full flex items-center justify-end pr-1 transition-all"
+                  style={{ width: `${(count/maxRating)*100}%`, background: ratingColors[rating], minWidth: count > 0 ? "24px" : "0" }}>
+                  {count > 0 && <span className="text-white text-[9px] font-black">{count}</span>}
+                </div>
+              </div>
+              <div className="text-[11px] text-stone-400 w-8 shrink-0">{count}城</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 都道府県TOP5 */}
+      {prefTop.length > 0 && (
+        <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
+          <h3 className="font-black text-stone-800 mb-4 text-sm">🗾 都道府県TOP5</h3>
+          <div className="space-y-2">
+            {prefTop.map(([pref, count], i) => (
+              <div key={pref} className="flex items-center gap-3">
+                <div className="text-[11px] font-black w-5 shrink-0" style={{ color: i===0?"#B7410E":i===1?"#d97706":i===2?"#7c6a56":"#9ca3af" }}>
+                  {i+1}
+                </div>
+                <div className="text-[11px] font-black text-stone-700 w-20 shrink-0">{pref}</div>
+                <div className="flex-1 bg-stone-50 rounded overflow-hidden h-5">
+                  <div className="h-full flex items-center justify-end pr-1 transition-all"
+                    style={{ width: `${(count/maxPref)*100}%`, background: i===0?"#B7410E":i===1?"#d97706":i===2?"#7c6a56":"#9ca3af", minWidth: "24px" }}>
+                    <span className="text-white text-[9px] font-black">{count}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandled, isVisible }: {
   castles: any[];
+  wishes?: any[];
   onCastleSelect: (castle: any) => void;
   focusCastleId?: string | null;
   onFocusHandled?: () => void;
@@ -495,6 +637,50 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       markersRef.current.push(marker);
     });
 
+    // ウィッシュリストマーカー（グレーのピン）
+    if (wishes && wishes.length > 0) {
+      const wishFiltered = term
+        ? wishes.filter((w: any) => (w.name+(w.pref||"")).toLowerCase().includes(term))
+        : wishes;
+      wishFiltered.forEach((wish: any) => {
+        if (!wish.lat && !wish.lng) {
+          const coords = PREF_COORDS[wish.pref]; if (!coords) return;
+          const h = stableHash(wish.id || wish.name);
+          wish._dispLat = coords[0] + (((h & 0xff) - 128) / 128) * 0.22;
+          wish._dispLng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
+        }
+        const lat = wish.lat || wish._dispLat; const lng = wish.lng || wish._dispLng;
+        if (!lat || !lng) return;
+        const emoji = wish.wishType === "battlefield" ? "⚔️" : "🏯";
+        const svgWish = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 48 58">
+          <filter id="ws" x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.3)"/>
+          </filter>
+          <path d="M24 0C13.5 0 5 8.5 5 19c0 14 19 39 19 39s19-25 19-39C43 8.5 34.5 0 24 0z"
+            fill="#9ca3af" stroke="#fff" stroke-width="2.5" filter="url(#ws)"/>
+          <circle cx="24" cy="19" r="11" fill="rgba(255,255,255,0.85)"/>
+          <text x="24" y="24" text-anchor="middle" font-size="12">${emoji}</text>
+        </svg>`;
+        const wUrl = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svgWish);
+        const wMarker = new google.maps.Marker({
+          position: { lat, lng }, map: mapInstanceRef.current,
+          icon: { url: wUrl, scaledSize: new google.maps.Size(34, 44), anchor: new google.maps.Point(17, 44) },
+          title: wish.name, optimized: false, zIndex: 1,
+        });
+        wMarker.addListener("click", () => {
+          const iw = infoWindowRef.current; if (!iw) return;
+          iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:100px">
+            <div style="font-weight:900;font-size:13px;color:#374151">⭐ 行きたい</div>
+            <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
+            ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
+          </div>`);
+          iw.open(mapInstanceRef.current, wMarker);
+        });
+        (wMarker as any)._wishId = wish.id;
+        markersRef.current.push(wMarker);
+      });
+    }
+
     if (term && markersRef.current.length === 1) {
       const pos = markersRef.current[0].getPosition();
       mapInstanceRef.current.setCenter(pos);
@@ -505,7 +691,7 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
       markersRef.current.forEach(m => bounds.extend(m.getPosition()));
       mapInstanceRef.current.fitBounds(bounds);
     }
-  }, [castles, mapReady, mapSearch]);
+  }, [castles, wishes, mapReady, mapSearch]);
 
   // 座標編集マップ
   useEffect(() => {
@@ -864,6 +1050,28 @@ export default function App() {
     } catch { setPhotoError("画像の処理に失敗しました。"); }
     finally { setPhotoLoading(false); if (photoInputRef.current) photoInputRef.current.value = ""; }
   };
+
+  // ─── 住所から都道府県を自動取得 ─────────────────────────
+  useEffect(() => {
+    if (!formData.address || formData.address.length < 4) return;
+    const timer = setTimeout(async () => {
+      const google = (window as any).google;
+      if (!google?.maps) return;
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address: formData.address, region: "jp" }, (results: any, status: any) => {
+        if (status !== "OK" || !results?.[0]) return;
+        // 都道府県コンポーネントを探す
+        const prefComp = results[0].address_components?.find((c: any) =>
+          c.types.includes("administrative_area_level_1")
+        );
+        if (prefComp) {
+          const prefName = prefComp.long_name;
+          setFormData(f => ({ ...f, pref: prefName }));
+        }
+      });
+    }, 800); // 800ms debounce
+    return () => clearTimeout(timer);
+  }, [formData.address]);
 
   // ─── 訪問記録 保存 ────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
@@ -1226,6 +1434,7 @@ export default function App() {
         )}
 
         {currentPage === "prefecture" && <PrefecturePage castles={castles} />}
+        {currentPage === "stats" && <StatsPage castles={castles} />}
         {/* マップは常時レンダリング・display:noneを使わない（サイズ0になりグレーになるため） */}
         <div style={{
           position: currentPage === "map" ? "relative" : "fixed",
@@ -1234,7 +1443,7 @@ export default function App() {
           width: "100%", height: currentPage === "map" ? "auto" : "100vh",
           top: currentPage === "map" ? "auto" : "-9999px",
         }}>
-          <MapPage castles={castles} onCastleSelect={(castle) => {
+          <MapPage castles={castles} wishes={wishes} onCastleSelect={(castle) => {
             setCurrentPage("list");
             setRecordTab(castle.recordType || "castle");
             setSearchTerm("");
@@ -1266,6 +1475,7 @@ export default function App() {
             { page: "list" as PageType, label: "訪問記録", Icon: LayoutList },
             { page: "prefecture" as PageType, label: "都道府県", Icon: Flag },
             { page: "map" as PageType, label: "マップ", Icon: Map },
+            { page: "stats" as PageType, label: "統計", Icon: BarChart2 },
             { page: "wishlist" as PageType, label: "行きたい", Icon: Heart },
           ].map(({ page, label, Icon }) => (
             <button key={page} onClick={() => setCurrentPage(page)}
@@ -1460,19 +1670,11 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label htmlFor="f-pref" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">都道府県</label>
-                    <input id="f-pref" name="pref" placeholder="例: 兵庫県"
-                      className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-                      value={formData.pref} onChange={(e) => setFormData({ ...formData, pref: e.target.value })} />
-                  </div>
-                  <div className="space-y-1.5">
+                <div className="space-y-1.5">
                     <label htmlFor="f-date" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">訪問日</label>
                     <input id="f-date" name="visitDate" type="date"
                       className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                       value={formData.visitDate} onChange={(e) => setFormData({ ...formData, visitDate: e.target.value })} />
-                  </div>
                 </div>
 
                 {/* ② 古戦場のみ「年」フィールドを表示 */}
@@ -1488,9 +1690,16 @@ export default function App() {
 
                 <div className="space-y-1.5">
                   <label htmlFor="f-address" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">所在地</label>
-                  <input id="f-address" name="address" placeholder="住所を入力"
+                  <input id="f-address" name="address" placeholder="住所を入力（都道府県は自動取得されます）"
                     className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                     value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
+                  {formData.pref && (
+                    <p className="text-[10px] text-stone-400 ml-1 flex items-center gap-1">
+                      <span className="text-green-500">✓</span> 都道府県: <span className="font-black text-stone-600">{formData.pref}</span>
+                      <button type="button" onClick={() => setFormData(f => ({...f, pref: ""}))}
+                        className="ml-1 text-stone-300 hover:text-stone-500">✕</button>
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-1.5">
