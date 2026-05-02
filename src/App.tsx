@@ -556,9 +556,36 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
           map.setZoom(14);
           setTimeout(() => {
             const marker = markersRef.current.find(m => (m as any)._wishId === focusWishId);
-            if (marker) {
-              const iw = infoWindowRef.current;
-              if (iw) iw.open(map, marker);
+            if (marker && infoWindowRef.current) {
+              infoWindowRef.current.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
+                <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
+                <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
+                ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
+                ${wish.address ? `<div style="font-size:10px;color:#9ca3af">${wish.address}</div>` : ""}
+                <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+                  <span id="iw-wish-back-${wish.id}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">一覧へ戻る</span>
+                  <span id="iw-wish-edit2-${wish.id}" style="font-size:10px;color:#6b7280;cursor:pointer;text-decoration:underline">位置修正</span>
+                </div>
+              </div>`);
+              infoWindowRef.current.open(map, marker);
+              const google = (window as any).google;
+              google.maps.event.addListenerOnce(infoWindowRef.current, "domready", () => {
+                const backBtn = document.getElementById(`iw-wish-back-${wish.id}`);
+                if (backBtn) backBtn.addEventListener("click", () => {
+                  infoWindowRef.current?.close();
+                  onFocusHandled?.();
+                  // 行きたい一覧ページへ遷移（onCastleSelectを流用してwishlistページへ）
+                  (window as any).__goToWishlist?.();
+                });
+                const editBtn = document.getElementById(`iw-wish-edit2-${wish.id}`);
+                if (editBtn) editBtn.addEventListener("click", () => {
+                  infoWindowRef.current?.close();
+                  const lat = marker.getPosition()?.lat() ?? wish.lat;
+                  const lng = marker.getPosition()?.lng() ?? wish.lng;
+                  setCoordLatLng(lat && lng ? { lat, lng } : null);
+                  setEditingCoord({ ...wish, _collection: "wishes" });
+                });
+              });
             }
           }, 200);
         } else {
@@ -573,7 +600,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   // isVisible変化時：フォーカスなしでマップタブに来た時だけ名古屋にリセット
   useEffect(() => {
     if (!isVisible || !mapReady || !mapInstanceRef.current) return;
-    if (!focusCastleId && !pendingFocusRef.current) {
+    if (!focusCastleId && !focusWishId && !pendingFocusRef.current) {
       infoWindowRef.current?.close();
       mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
       mapInstanceRef.current.setZoom(10);
@@ -1069,6 +1096,12 @@ export default function App() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [focusCastleId, setFocusCastleId] = useState<string | null>(null);
   const [focusWishId, setFocusWishId] = useState<string | null>(null);
+
+  // マップのwishポップアップから行きたい一覧へ戻るためのグローバル関数
+  useEffect(() => {
+    (window as any).__goToWishlist = () => setCurrentPage("wishlist");
+    return () => { delete (window as any).__goToWishlist; };
+  }, []);
 
   // ─── Firestore 読み込み（④ キャッシュ優先：初回もキャッシュから即表示） ──
   useEffect(() => {
