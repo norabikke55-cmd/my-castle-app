@@ -350,8 +350,8 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
     return () => {
       markersRef.current.forEach(m => m.setMap(null));
       markersRef.current = [];
-      mapInstanceRef.current = null;
-      infoWindowRef.current = null;
+      // mapInstanceRef・infoWindowRef はここでnullにしない
+      // （nullにするとコンポーネント再レンダリング時に再初期化ループが発生する）
     };
   }, []);
 
@@ -362,42 +362,43 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
   }, [mapType]);
 
   // ページ表示 + フォーカスを一本化
-  // isVisible/mapReady/focusCastleId のいずれかが変わったら再評価
   useEffect(() => {
     if (!isVisible || !mapReady || !mapInstanceRef.current) return;
     const google = (window as any).google;
-
-    // まず resize してグレー防止（DOMサイズ確定後）
-    google.maps.event.trigger(mapInstanceRef.current, "resize");
+    const map = mapInstanceRef.current;
 
     const targetId = focusCastleId || pendingFocusRef.current;
 
     if (targetId) {
-      // フォーカス対象あり：名古屋リセットせずそのまま城へ
       pendingFocusRef.current = null;
       const castle = castles.find((c: any) => c.id === targetId);
       if (castle && castle.lat && castle.lng) {
-        mapInstanceRef.current.setCenter({ lat: castle.lat, lng: castle.lng });
-        mapInstanceRef.current.setZoom(14);
-        // マーカーはマップ移動後に描画されるので少し待つ
+        // 先にcenterとzoomをセットしてからresizeする（名古屋が一瞬見えるのを防ぐ）
+        map.setCenter({ lat: castle.lat, lng: castle.lng });
+        map.setZoom(14);
+        google.maps.event.trigger(map, "resize");
+        map.setCenter({ lat: castle.lat, lng: castle.lng }); // resize後に再セット
         setTimeout(() => {
           const marker = markersRef.current.find(m => (m as any)._castleId === targetId);
           if (marker) openInfoWindow(castle, marker);
-        }, 400);
+        }, 350);
       } else if (castle) {
-        // 座標なし→都道府県中心
         const prefCoords = PREF_COORDS[castle.pref];
         if (prefCoords) {
-          mapInstanceRef.current.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
-          mapInstanceRef.current.setZoom(11);
+          map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
+          map.setZoom(11);
+          google.maps.event.trigger(map, "resize");
+          map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
         }
       }
       onFocusHandled?.();
     } else {
-      // フォーカス対象なし：名古屋（初期位置）にリセット
+      // フォーカスなし：初期位置にリセット
       infoWindowRef.current?.close();
-      mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
-      mapInstanceRef.current.setZoom(10);
+      map.setCenter({ lat: 35.180, lng: 136.907 });
+      map.setZoom(10);
+      google.maps.event.trigger(map, "resize");
+      map.setCenter({ lat: 35.180, lng: 136.907 });
     }
   }, [isVisible, mapReady, focusCastleId]);
 
@@ -468,24 +469,35 @@ const MapPage = ({ castles, onCastleSelect, focusCastleId, onFocusHandled, isVis
         lng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
       }
 
-      const emoji = castle.recordType === "battlefield" ? "⚔️" : "🏯";
-      const scale = markerScale(castle.rating || 5);
-      const color = markerColor(castle.rating || 5);
+      const isBattlefield = castle.recordType === "battlefield";
+      const rating = castle.rating || 3;
+      const color = markerColor(rating);
+
+      // SVGピンマーカー（城は🏯、合戦地は⚔️を中に入れた目立つピン型）
+      const pinSize = 36 + (rating - 1) * 3; // 評価に応じて36〜48px
+      const emoji = isBattlefield ? "⚔️" : "🏯";
+      const svgPin = `<svg xmlns="http://www.w3.org/2000/svg" width="${pinSize}" height="${pinSize + 10}" viewBox="0 0 48 58">
+        <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.4)"/>
+        </filter>
+        <path d="M24 0C13.5 0 5 8.5 5 19c0 14 19 39 19 39s19-25 19-39C43 8.5 34.5 0 24 0z"
+          fill="${color}" stroke="#fff" stroke-width="2.5" filter="url(#shadow)"/>
+        <circle cx="24" cy="19" r="11" fill="rgba(255,255,255,0.9)"/>
+        <text x="24" y="24" text-anchor="middle" font-size="13">${emoji}</text>
+      </svg>`;
+      const svgUrl = "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svgPin);
 
       const marker = new google.maps.Marker({
         position: { lat, lng },
         map: mapInstanceRef.current,
         icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          fillColor: color,
-          fillOpacity: 1,
-          strokeColor: "#fff",
-          strokeWeight: 2,
-          scale,
+          url: svgUrl,
+          scaledSize: new google.maps.Size(pinSize, pinSize + 10),
+          anchor: new google.maps.Point(pinSize / 2, pinSize + 10), // ピンの先端を座標に合わせる
         },
-        label: { text: emoji, fontSize: `${scale}px` },
         title: castle.name,
-        optimized: true,
+        optimized: false, // SVGはoptimized:falseが必要
+        zIndex: rating * 10, // 高評価が手前に
       });
 
       marker.addListener("click", () => openInfoWindow(castle, marker));
