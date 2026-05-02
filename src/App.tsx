@@ -637,20 +637,13 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
       markersRef.current.push(marker);
     });
 
-    // ウィッシュリストマーカー（グレーのピン）
+    // ウィッシュリストマーカー（緑ピン）
     if (wishes && wishes.length > 0) {
       const wishFiltered = term
         ? wishes.filter((w: any) => (w.name+(w.pref||"")).toLowerCase().includes(term))
         : wishes;
-      wishFiltered.forEach((wish: any) => {
-        if (!wish.lat && !wish.lng) {
-          const coords = PREF_COORDS[wish.pref]; if (!coords) return;
-          const h = stableHash(wish.id || wish.name);
-          wish._dispLat = coords[0] + (((h & 0xff) - 128) / 128) * 0.22;
-          wish._dispLng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.22;
-        }
-        const lat = wish.lat || wish._dispLat; const lng = wish.lng || wish._dispLng;
-        if (!lat || !lng) return;
+
+      const placeWishMarker = (wish: any, lat: number, lng: number) => {
         const emoji = wish.wishType === "battlefield" ? "⚔️" : "🏯";
         const svgWish = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 48 58">
           <filter id="ws" x="-30%" y="-30%" width="160%" height="160%">
@@ -670,14 +663,49 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
         wMarker.addListener("click", () => {
           const iw = infoWindowRef.current; if (!iw) return;
           iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:100px">
-            <div style="font-weight:900;font-size:13px;color:#374151">⭐ 行きたい</div>
+            <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
             <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
             ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
+            ${wish.address ? `<div style="font-size:10px;color:#9ca3af">${wish.address}</div>` : ""}
           </div>`);
           iw.open(mapInstanceRef.current, wMarker);
         });
         (wMarker as any)._wishId = wish.id;
         markersRef.current.push(wMarker);
+      };
+
+      const geocoder = new google.maps.Geocoder();
+      wishFiltered.forEach((wish: any) => {
+        if (wish.lat && wish.lng) {
+          // 座標済み：そのまま表示
+          placeWishMarker(wish, wish.lat, wish.lng);
+        } else if (wish.address || wish.pref) {
+          // 住所からジオコード（表示のみ・DBには保存しない）
+          const query = wish.address
+            ? (wish.pref && !wish.address.startsWith(wish.pref) ? wish.pref + wish.address : wish.address)
+            : `${wish.pref} ${wish.name}`;
+          geocoder.geocode({ address: query, region: "jp" }, async (results: any, status: any) => {
+            if (status === "OK" && results?.[0]) {
+              const loc = results[0].geometry.location;
+              const lat = loc.lat(), lng = loc.lng();
+              placeWishMarker(wish, lat, lng);
+              // 取得した座標をDBに保存（次回から即表示）
+              try {
+                const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", wish.id);
+                await setDoc(ref, { ...wish, lat, lng, updatedAt: new Date().toISOString() });
+              } catch (e) { console.error("wish座標保存失敗", e); }
+            } else {
+              // ジオコード失敗時は都道府県中心にフォールバック（DBには保存しない）
+              const coords = PREF_COORDS[wish.pref];
+              if (coords) {
+                const h = stableHash(wish.id || wish.name);
+                const lat = coords[0] + (((h & 0xff) - 128) / 128) * 0.15;
+                const lng = coords[1] + ((((h >> 8) & 0xff) - 128) / 128) * 0.15;
+                placeWishMarker(wish, lat, lng);
+              }
+            }
+          });
+        }
       });
     }
 
@@ -1454,14 +1482,7 @@ export default function App() {
             }, 300);
           }} focusCastleId={focusCastleId} onFocusHandled={() => setFocusCastleId(null)}
           isVisible={currentPage === "map"} />
-          {/* 凡例 */}
-          {currentPage === "map" && (
-            <div className="absolute bottom-16 left-3 z-[10] bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2 shadow-md border border-stone-200 text-[10px] font-black text-stone-600 space-y-1 pointer-events-none">
-              <div className="flex items-center gap-1.5"><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#B7410E"}}></span>訪問済み城郭</div>
-              <div className="flex items-center gap-1.5"><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#7c6a56"}}></span>古戦場</div>
-              <div className="flex items-center gap-1.5"><span style={{display:"inline-block",width:10,height:10,borderRadius:"50%",background:"#16a34a"}}></span>行きたい</div>
-            </div>
-          )}
+
         </div>
         {currentPage === "wishlist" && (
           <WishlistPage
@@ -1588,23 +1609,30 @@ export default function App() {
                   alert(`APIテスト失敗\n城名: ${testCastle.name}\nクエリ: ${testQuery}\n\nGoogle Maps APIキーのGeocoding APIが有効か確認してください。\nGoogle Cloud Console → APIとサービス → 認証情報 → APIキーの制限を確認してください。`);
                   return;
                 }
+                // wishesも対象に含める
+                const wishTargets = wishes.filter((w: any) => !w.lat || !w.lng);
+                const allTargets = [
+                  ...targets.map((t: any) => ({ ...t, _col: "castles" })),
+                  ...wishTargets.map((w: any) => ({ ...w, _col: "wishes" })),
+                ];
                 let success = 0, fail = 0;
-                for (const castle of targets) {
-                  const addr = castle.address || "";
-                  const pref = castle.pref || "";
-                  const name = castle.name || "";
+                for (const item of allTargets) {
+                  const addr = item.address || "";
+                  const pref = item.pref || "";
+                  const name = item.name || "";
                   let coords: {lat:number,lng:number}|null = null;
                   if (addr) coords = await geocodeOne(pref && !addr.startsWith(pref) ? pref+addr : addr, pref);
                   if (!coords && pref) coords = await geocodeOne(`${pref} ${name}`, pref);
                   if (!coords) coords = await geocodeOne(name, pref);
-                  const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", castle.id);
+                  const { _col, ...saveItem } = item;
+                  const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, _col, item.id);
                   if (coords) {
-                    await setDoc(ref, { ...castle, lat: coords.lat, lng: coords.lng, updatedAt: new Date().toISOString() });
+                    await setDoc(ref, { ...saveItem, lat: coords.lat, lng: coords.lng, updatedAt: new Date().toISOString() });
                     success++;
                   } else { fail++; }
                   await new Promise(r => setTimeout(r, 300));
                 }
-                alert(`座標付与完了\n成功: ${success} 件 / 失敗: ${fail} 件`);
+                alert(`座標付与完了\n成功: ${success} 件 / 失敗: ${fail} 件\n（訪問済み${targets.length}件 + 行きたい${wishTargets.length}件が対象）`);
               }} className="w-full flex items-center justify-between p-6 bg-stone-50 rounded-[24px] font-black text-sm hover:bg-stone-100 transition-all">
                 <div className="flex items-center gap-4">
                   <div className="p-2 bg-white rounded-lg shadow-sm"><MapPin size={20} className="text-stone-800" /></div>
