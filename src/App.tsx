@@ -440,6 +440,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
   const coordMapInstanceRef = useRef<any>(null);
   const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const pendingFocusRef = useRef<string | null>(null);
+  const geocodedWishIdsRef = useRef<Set<string>>(new Set()); // ジオコード済みwish IDを記録（ループ防止）
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
 
   // Google Maps 初期化
@@ -684,18 +685,22 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
           const query = wish.address
             ? (wish.pref && !wish.address.startsWith(wish.pref) ? wish.pref + wish.address : wish.address)
             : `${wish.pref} ${wish.name}`;
+          // すでにジオコード済みならスキップ（DBへの保存→wishes更新→再実行のループ防止）
+          if (geocodedWishIdsRef.current.has(wish.id)) return;
+          geocodedWishIdsRef.current.add(wish.id);
           geocoder.geocode({ address: query, region: "jp" }, async (results: any, status: any) => {
             if (status === "OK" && results?.[0]) {
               const loc = results[0].geometry.location;
               const lat = loc.lat(), lng = loc.lng();
               placeWishMarker(wish, lat, lng);
-              // 取得した座標をDBに保存（次回から即表示）
+              // 取得した座標をDBに保存（次回から座標ありとして即表示）
               try {
                 const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", wish.id);
                 await setDoc(ref, { ...wish, lat, lng, updatedAt: new Date().toISOString() });
               } catch (e) { console.error("wish座標保存失敗", e); }
             } else {
               // ジオコード失敗時は都道府県中心にフォールバック（DBには保存しない）
+              geocodedWishIdsRef.current.delete(wish.id); // 失敗時はRefから削除して次回再試行可能に
               const coords = PREF_COORDS[wish.pref];
               if (coords) {
                 const h = stableHash(wish.id || wish.name);
