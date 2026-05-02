@@ -663,13 +663,27 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
         });
         wMarker.addListener("click", () => {
           const iw = infoWindowRef.current; if (!iw) return;
-          iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:100px">
+          iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
             <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
             <div style="font-weight:900;font-size:13px;color:#374151">${wish.name}</div>
             ${wish.pref ? `<div style="font-size:11px;color:#6b7280">${wish.pref}</div>` : ""}
             ${wish.address ? `<div style="font-size:10px;color:#9ca3af">${wish.address}</div>` : ""}
+            <div style="margin-top:6px">
+              <span id="iw-wish-edit-${wish.id}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">位置修正</span>
+            </div>
           </div>`);
           iw.open(mapInstanceRef.current, wMarker);
+          // 位置修正ボタンのクリックイベント（DOM生成後に登録）
+          google.maps.event.addListenerOnce(iw, "domready", () => {
+            const btn = document.getElementById(`iw-wish-edit-${wish.id}`);
+            if (btn) btn.addEventListener("click", () => {
+              iw.close();
+              const lat = wMarker.getPosition()?.lat() ?? wish.lat;
+              const lng = wMarker.getPosition()?.lng() ?? wish.lng;
+              setCoordLatLng(lat && lng ? { lat, lng } : null);
+              setEditingCoord({ ...wish, _collection: "wishes" });
+            });
+          });
         });
         (wMarker as any)._wishId = wish.id;
         markersRef.current.push(wMarker);
@@ -843,8 +857,12 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
               )}
               <button onClick={async () => {
                 if (!coordLatLng) return;
-                const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, "castles", editingCoord.id);
-                await setDoc(ref, { ...editingCoord, lat: coordLatLng.lat, lng: coordLatLng.lng, manualCoord: true, updatedAt: new Date().toISOString() });
+                const col = editingCoord._collection || "castles";
+                const { _collection, ...saveData } = editingCoord;
+                const ref = doc(db, "artifacts", appId, "users", FIXED_USER_ID, col, saveData.id);
+                await setDoc(ref, { ...saveData, lat: coordLatLng.lat, lng: coordLatLng.lng, manualCoord: true, updatedAt: new Date().toISOString() });
+                // wishの場合はジオコード済みキャッシュをクリアして次回再表示に備える
+                if (col === "wishes") geocodedWishIdsRef.current.delete(saveData.id);
                 setEditingCoord(null); setCoordLatLng(null);
               }} className="w-full bg-[#B7410E] text-white py-3 rounded-[18px] font-black text-sm hover:bg-[#9a3509] transition-all">
                 この位置で保存
