@@ -200,7 +200,7 @@ const Stars = ({ rating, size = 12 }: { rating: number; size?: number }) => (
 
 // ─── 都道府県一覧ページ ─────────────────────────────────
 
-const PrefecturePage = ({ castles }: { castles: any[] }) => {
+const PrefecturePage = ({ castles, onCastleSelect }: { castles: any[]; onCastleSelect: (castle: any) => void }) => {
   const grouped = useMemo(() => {
     const map: Record<string, any[]> = {};
     castles.forEach((c) => {
@@ -244,7 +244,8 @@ const PrefecturePage = ({ castles }: { castles: any[] }) => {
             </div>
             <div className="divide-y divide-stone-50">
               {[...items].sort((a, b) => (b.rating || 5) - (a.rating || 5)).map((castle) => (
-                <div key={castle.id} className="pl-10 pr-5 py-2 flex items-center justify-between gap-3">
+                <div key={castle.id} className="pl-10 pr-5 py-2 flex items-center justify-between gap-3 hover:bg-amber-50 transition-colors cursor-pointer"
+                  onClick={() => onCastleSelect(castle)}>
                   <div className="flex items-center gap-2 min-w-0">
                     {castle.recordType === "battlefield" && <Sword size={11} className="text-stone-400 shrink-0" />}
                     <span className="text-sm font-bold text-stone-800 truncate">{castle.name}</span>
@@ -434,11 +435,12 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
   );
 };
 
-const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandled, isVisible }: {
+const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, onFocusHandled, isVisible }: {
   castles: any[];
   wishes?: any[];
   onCastleSelect: (castle: any) => void;
   focusCastleId?: string | null;
+  focusWishId?: string | null;
   onFocusHandled?: () => void;
   isVisible?: boolean;
 }) => {
@@ -518,33 +520,55 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
     mapInstanceRef.current.setMapTypeId(mapType);
   }, [mapType]);
 
-  // フォーカス処理（display:noneをやめたのでresizeは不要。シンプルに城へ飛ぶだけ）
+  // フォーカス処理（訪問済み城 or 行きたい城）
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
     const map = mapInstanceRef.current;
-    const targetId = focusCastleId || pendingFocusRef.current;
-    if (!targetId) return;
 
-    pendingFocusRef.current = null;
-    const castle = castles.find((c: any) => c.id === targetId);
-    if (!castle) { onFocusHandled?.(); return; }
-
-    if (castle.lat && castle.lng) {
-      map.setCenter({ lat: castle.lat, lng: castle.lng });
-      map.setZoom(14);
-      setTimeout(() => {
-        const marker = markersRef.current.find(m => (m as any)._castleId === targetId);
-        if (marker) openInfoWindow(castle, marker);
-      }, 200);
-    } else {
-      const prefCoords = PREF_COORDS[castle.pref];
-      if (prefCoords) {
-        map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] });
-        map.setZoom(11);
+    // 訪問済み城のフォーカス
+    const castleTargetId = focusCastleId || pendingFocusRef.current;
+    if (castleTargetId) {
+      pendingFocusRef.current = null;
+      const castle = castles.find((c: any) => c.id === castleTargetId);
+      if (castle) {
+        if (castle.lat && castle.lng) {
+          map.setCenter({ lat: castle.lat, lng: castle.lng });
+          map.setZoom(14);
+          setTimeout(() => {
+            const marker = markersRef.current.find(m => (m as any)._castleId === castleTargetId);
+            if (marker) openInfoWindow(castle, marker);
+          }, 200);
+        } else {
+          const prefCoords = PREF_COORDS[castle.pref];
+          if (prefCoords) { map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] }); map.setZoom(11); }
+        }
       }
+      onFocusHandled?.();
+      return;
     }
-    onFocusHandled?.();
-  }, [focusCastleId, mapReady]);
+
+    // 行きたい城のフォーカス
+    if (focusWishId && wishes) {
+      const wish = wishes.find((w: any) => w.id === focusWishId);
+      if (wish) {
+        if (wish.lat && wish.lng) {
+          map.setCenter({ lat: wish.lat, lng: wish.lng });
+          map.setZoom(14);
+          setTimeout(() => {
+            const marker = markersRef.current.find(m => (m as any)._wishId === focusWishId);
+            if (marker) {
+              const iw = infoWindowRef.current;
+              if (iw) iw.open(map, marker);
+            }
+          }, 200);
+        } else {
+          const prefCoords = PREF_COORDS[wish.pref];
+          if (prefCoords) { map.setCenter({ lat: prefCoords[0], lng: prefCoords[1] }); map.setZoom(11); }
+        }
+      }
+      onFocusHandled?.();
+    }
+  }, [focusCastleId, focusWishId, mapReady]);
 
   // isVisible変化時：フォーカスなしでマップタブに来た時だけ名古屋にリセット
   useEffect(() => {
@@ -893,11 +917,12 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, onFocusHandle
 
 // ─── ウィッシュリストページ ─────────────────────────────
 
-const WishlistPage = ({ wishes, onEdit, onDelete, onVisited }: {
+const WishlistPage = ({ wishes, onEdit, onDelete, onVisited, onMapFocus }: {
   wishes: any[];
   onEdit: (w: any) => void;
   onDelete: (id: string, name: string) => void;
   onVisited: (w: any) => void;
+  onMapFocus: (id: string) => void;
 }) => {
   const [sortKey, setSortKey] = useState<WishSortKey>("priority");
 
@@ -982,6 +1007,10 @@ const WishlistPage = ({ wishes, onEdit, onDelete, onVisited }: {
                 className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[11px] font-black hover:bg-amber-100 transition-all">
                 <CheckCircle size={13} /> 訪問済みへ
               </button>
+              <button onClick={() => onMapFocus(w.id)}
+                className="p-2 bg-stone-50 text-stone-400 hover:text-green-600 hover:bg-green-50 rounded-full transition-all" title="地図で見る">
+                <Map size={14} />
+              </button>
               <button onClick={() => onEdit(w)}
                 className="p-2 bg-stone-50 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-full transition-all">
                 <Edit3 size={14} />
@@ -1039,6 +1068,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [focusCastleId, setFocusCastleId] = useState<string | null>(null);
+  const [focusWishId, setFocusWishId] = useState<string | null>(null);
 
   // ─── Firestore 読み込み（④ キャッシュ優先：初回もキャッシュから即表示） ──
   useEffect(() => {
@@ -1502,7 +1532,16 @@ export default function App() {
           </>
         )}
 
-        {currentPage === "prefecture" && <PrefecturePage castles={castles} />}
+        {currentPage === "prefecture" && <PrefecturePage castles={castles} onCastleSelect={(castle) => {
+          setCurrentPage("list");
+          setRecordTab(castle.recordType || "castle");
+          setSearchTerm("");
+          setHighlightId(castle.id);
+          setTimeout(() => {
+            const el = document.getElementById(`castle-card-${castle.id}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 300);
+        }} />}
         {currentPage === "stats" && <StatsPage castles={castles} />}
         {/* マップは常時レンダリング・display:noneを使わない（サイズ0になりグレーになるため） */}
         <div style={{
@@ -1521,7 +1560,8 @@ export default function App() {
               const el = document.getElementById(`castle-card-${castle.id}`);
               if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 300);
-          }} focusCastleId={focusCastleId} onFocusHandled={() => setFocusCastleId(null)}
+          }} focusCastleId={focusCastleId} focusWishId={focusWishId}
+          onFocusHandled={() => { setFocusCastleId(null); setFocusWishId(null); }}
           isVisible={currentPage === "map"} />
 
         </div>
@@ -1534,6 +1574,7 @@ export default function App() {
                 await deleteDoc(doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", id));
             }}
             onVisited={handleMoveToVisited}
+            onMapFocus={(id) => { setFocusWishId(id); setCurrentPage("map"); }}
           />
         )}
       </main>
