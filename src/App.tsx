@@ -618,6 +618,39 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
     });
   };
 
+  // wish用ポップアップ表示（MapPageのメソッドとして定義・スコープ問題を解消）
+  const openWishInfoWindow = (wishData: any, wMarker: any) => {
+    const google = (window as any).google;
+    const iw = infoWindowRef.current; if (!iw || !mapInstanceRef.current) return;
+    const wishId = wishData.id;
+    iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
+      <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
+      <div style="font-weight:900;font-size:13px;color:#374151">${wishData.name}</div>
+      ${wishData.pref ? `<div style="font-size:11px;color:#6b7280">${wishData.pref}</div>` : ""}
+      ${wishData.address ? `<div style="font-size:10px;color:#9ca3af">${wishData.address}</div>` : ""}
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
+        <span id="iw-wish-back-${wishId}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">一覧へ戻る</span>
+        <span id="iw-wish-edit-${wishId}" style="font-size:10px;color:#6b7280;cursor:pointer;text-decoration:underline">位置修正</span>
+      </div>
+    </div>`);
+    iw.open(mapInstanceRef.current, wMarker);
+    google.maps.event.addListenerOnce(iw, "domready", () => {
+      const backBtn = document.getElementById(`iw-wish-back-${wishId}`);
+      if (backBtn) backBtn.addEventListener("click", () => {
+        iw.close();
+        (window as any).__goToWishlist?.();
+      });
+      const editBtn = document.getElementById(`iw-wish-edit-${wishId}`);
+      if (editBtn) editBtn.addEventListener("click", () => {
+        iw.close();
+        const lat = wMarker.getPosition()?.lat() ?? wishData.lat;
+        const lng = wMarker.getPosition()?.lng() ?? wishData.lng;
+        setCoordLatLng(lat && lng ? { lat, lng } : null);
+        setEditingCoord({ ...wishData, _collection: "wishes" });
+      });
+    });
+  };
+
   // マーカー更新
   useEffect(() => {
     if (!mapReady || !mapInstanceRef.current) return;
@@ -685,38 +718,6 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
       const wishFiltered = term
         ? wishes.filter((w: any) => (w.name+(w.pref||"")).toLowerCase().includes(term))
         : wishes;
-
-      // wish用ポップアップ表示（クリック時・フォーカス時共通）
-      const openWishInfoWindow = (wishData: any, wMarker: any) => {
-        const iw = infoWindowRef.current; if (!iw) return;
-        const wishId = wishData.id;
-        iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:180px">
-          <div style="font-weight:900;font-size:13px;color:#16a34a">⭐ 行きたい</div>
-          <div style="font-weight:900;font-size:13px;color:#374151">${wishData.name}</div>
-          ${wishData.pref ? `<div style="font-size:11px;color:#6b7280">${wishData.pref}</div>` : ""}
-          ${wishData.address ? `<div style="font-size:10px;color:#9ca3af">${wishData.address}</div>` : ""}
-          <div style="margin-top:6px;display:flex;gap:8px;align-items:center">
-            <span id="iw-wish-back-${wishId}" style="font-size:10px;color:#16a34a;cursor:pointer;text-decoration:underline;font-weight:bold">一覧へ戻る</span>
-            <span id="iw-wish-edit-${wishId}" style="font-size:10px;color:#6b7280;cursor:pointer;text-decoration:underline">位置修正</span>
-          </div>
-        </div>`);
-        iw.open(mapInstanceRef.current, wMarker);
-        google.maps.event.addListenerOnce(iw, "domready", () => {
-          const backBtn = document.getElementById(`iw-wish-back-${wishId}`);
-          if (backBtn) backBtn.addEventListener("click", () => {
-            iw.close();
-            (window as any).__goToWishlist?.();
-          });
-          const editBtn = document.getElementById(`iw-wish-edit-${wishId}`);
-          if (editBtn) editBtn.addEventListener("click", () => {
-            iw.close();
-            const lat = wMarker.getPosition()?.lat() ?? wishData.lat;
-            const lng = wMarker.getPosition()?.lng() ?? wishData.lng;
-            setCoordLatLng(lat && lng ? { lat, lng } : null);
-            setEditingCoord({ ...wishData, _collection: "wishes" });
-          });
-        });
-      };
 
       const placeWishMarker = (wish: any, lat: number, lng: number) => {
         const emoji = wish.wishType === "battlefield" ? "⚔️" : "🏯";
