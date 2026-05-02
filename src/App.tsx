@@ -121,15 +121,15 @@ const resolveCoords = (name: string, address: string, pref: string): Promise<{ l
         });
       });
 
-    // 都道府県+城名 → 住所 → 城名のみ の順で試行
+    // 住所 → 都道府県+城名 → 城名のみ の順で試行
     (async () => {
-      if (pref) {
-        const r = await geocodeOne(`${pref} ${name}`);
-        if (r) { resolve(r); return; }
-      }
       if (address) {
         const query = (pref && !address.startsWith(pref)) ? `${pref}${address}` : address;
         const r = await geocodeOne(query);
+        if (r) { resolve(r); return; }
+      }
+      if (pref) {
+        const r = await geocodeOne(`${pref} ${name}`);
         if (r) { resolve(r); return; }
       }
       const r = await geocodeOne(name);
