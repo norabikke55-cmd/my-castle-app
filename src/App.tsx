@@ -160,6 +160,23 @@ const getProvinceFromPref = (pref: string, city?: string): string => {
   return "";
 };
 
+// フォーム用ジオコード（REST API・SDKに依存しない・住所→都道府県+市区町村取得）
+const geocodeAddressForForm = async (address: string): Promise<{ pref: string; city: string } | null> => {
+  try {
+    const key = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || "";
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&region=jp&language=ja&key=${key}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.status !== "OK" || !data.results?.[0]) return null;
+    const comps = data.results[0].address_components || [];
+    const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
+    const cityComp = comps.find((c: any) =>
+      c.types.includes("locality") || c.types.includes("administrative_area_level_2")
+    );
+    return { pref: prefComp?.long_name || "", city: cityComp?.long_name || "" };
+  } catch { return null; }
+};
+
 // 日本国内の座標かチェック（おおよその範囲）
 const isInJapan = (lat: number, lng: number): boolean =>
   lat >= 24 && lat <= 46 && lng >= 122 && lng <= 154;
@@ -1223,31 +1240,18 @@ export default function App() {
     finally { setPhotoLoading(false); if (photoInputRef.current) photoInputRef.current.value = ""; }
   };
 
-  // ─── 住所から都道府県・旧国名を自動取得 ──────────────────
+  // ─── 住所から都道府県・旧国名を自動取得（REST API・SDKに依存しない） ──
   useEffect(() => {
     if (!formData.address || formData.address.length < 4) return;
     const timer = setTimeout(async () => {
-      const google = (window as any).google;
-      if (!google?.maps) return;
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ address: formData.address, region: "jp" }, (results: any, status: any) => {
-        if (status !== "OK" || !results?.[0]) return;
-        const comps = results[0].address_components || [];
-        const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
-        const cityComp = comps.find((c: any) =>
-          c.types.includes("locality") || c.types.includes("administrative_area_level_2")
-        );
-        if (prefComp) {
-          const prefName = prefComp.long_name;
-          const cityName = cityComp?.long_name || "";
-          const province = getProvinceFromPref(prefName, cityName);
-          setFormData(f => ({
-            ...f,
-            pref: prefName,
-            province: f.province ? f.province : province,
-          }));
-        }
-      });
+      const result = await geocodeAddressForForm(formData.address);
+      if (!result?.pref) return;
+      const province = getProvinceFromPref(result.pref, result.city);
+      setFormData(f => ({
+        ...f,
+        pref: result.pref,
+        province: f.province ? f.province : province,
+      }));
     }, 800);
     return () => clearTimeout(timer);
   }, [formData.address]);
@@ -1373,31 +1377,18 @@ export default function App() {
 
 
 
-  // ─── 行きたい城フォーム：住所から都道府県・旧国名を自動取得 ──
+  // ─── 行きたい城フォーム：住所から都道府県・旧国名を自動取得（REST API版） ──
   useEffect(() => {
     if (!wishFormData.address || wishFormData.address.length < 4) return;
     const timer = setTimeout(async () => {
-      const google = (window as any).google;
-      if (!google?.maps) return;
-      const geocoder = new google.maps.Geocoder();
-      geocoder.geocode({ address: wishFormData.address, region: "jp" }, (results: any, status: any) => {
-        if (status !== "OK" || !results?.[0]) return;
-        const comps = results[0].address_components || [];
-        const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
-        const cityComp = comps.find((c: any) =>
-          c.types.includes("locality") || c.types.includes("administrative_area_level_2")
-        );
-        if (prefComp) {
-          const prefName = prefComp.long_name;
-          const cityName = cityComp?.long_name || "";
-          const province = getProvinceFromPref(prefName, cityName);
-          setWishFormData(f => ({
-            ...f,
-            pref: prefName,
-            province: f.province ? f.province : province,
-          }));
-        }
-      });
+      const result = await geocodeAddressForForm(wishFormData.address);
+      if (!result?.pref) return;
+      const province = getProvinceFromPref(result.pref, result.city);
+      setWishFormData(f => ({
+        ...f,
+        pref: result.pref,
+        province: f.province ? f.province : province,
+      }));
     }, 800);
     return () => clearTimeout(timer);
   }, [wishFormData.address]);
