@@ -160,24 +160,32 @@ const getProvinceFromPref = (pref: string, city?: string): string => {
   return "";
 };
 
-// フォーム用ジオコード（REST API・SDKに依存しない・住所→都道府県+市区町村取得）
-const geocodeAddressForForm = async (address: string): Promise<{ pref: string; city: string } | null> => {
-  try {
-    const key = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || "";
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&region=jp&language=ja&key=${key}`;
-    console.log("[geocodeAddressForForm] URL:", url);
-    const res = await fetch(url);
-    const data = await res.json();
-    console.log("[geocodeAddressForForm] status:", data.status, "key length:", key.length);
-    if (data.status !== "OK" || !data.results?.[0]) return null;
-    const comps = data.results[0].address_components || [];
-    const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
-    const cityComp = comps.find((c: any) =>
-      c.types.includes("locality") || c.types.includes("administrative_area_level_2")
-    );
-    console.log("[geocodeAddressForForm] pref:", prefComp?.long_name, "city:", cityComp?.long_name);
-    return { pref: prefComp?.long_name || "", city: cityComp?.long_name || "" };
-  } catch (e) { console.error("[geocodeAddressForForm] error:", e); return null; }
+// フォーム用ジオコード（SDK版・HTTPリファラー制限を回避）
+// MapPageが常時マウントされているためSDKは起動時に初期化済み
+const geocodeAddressForForm = (address: string): Promise<{ pref: string; city: string } | null> => {
+  return new Promise((resolve) => {
+    const waitForSDK = (retries: number) => {
+      const google = (window as any).google;
+      if (google?.maps?.Geocoder) {
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ address, region: "jp" }, (results: any, status: any) => {
+          if (status !== "OK" || !results?.[0]) { resolve(null); return; }
+          const comps = results[0].address_components || [];
+          const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
+          const cityComp = comps.find((c: any) =>
+            c.types.includes("locality") || c.types.includes("administrative_area_level_2")
+          );
+          resolve({ pref: prefComp?.long_name || "", city: cityComp?.long_name || "" });
+        });
+      } else if (retries > 0) {
+        // SDKがまだ初期化されていない場合は500ms待ってリトライ（最大5秒）
+        setTimeout(() => waitForSDK(retries - 1), 500);
+      } else {
+        resolve(null);
+      }
+    };
+    waitForSDK(10); // 最大10回リトライ（5秒）
+  });
 };
 
 // 日本国内の座標かチェック（おおよその範囲）
