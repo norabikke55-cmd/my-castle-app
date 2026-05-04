@@ -165,16 +165,19 @@ const geocodeAddressForForm = async (address: string): Promise<{ pref: string; c
   try {
     const key = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || "";
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&region=jp&language=ja&key=${key}`;
+    console.log("[geocodeAddressForForm] URL:", url);
     const res = await fetch(url);
     const data = await res.json();
+    console.log("[geocodeAddressForForm] status:", data.status, "key length:", key.length);
     if (data.status !== "OK" || !data.results?.[0]) return null;
     const comps = data.results[0].address_components || [];
     const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
     const cityComp = comps.find((c: any) =>
       c.types.includes("locality") || c.types.includes("administrative_area_level_2")
     );
+    console.log("[geocodeAddressForForm] pref:", prefComp?.long_name, "city:", cityComp?.long_name);
     return { pref: prefComp?.long_name || "", city: cityComp?.long_name || "" };
-  } catch { return null; }
+  } catch (e) { console.error("[geocodeAddressForForm] error:", e); return null; }
 };
 
 // 日本国内の座標かチェック（おおよその範囲）
