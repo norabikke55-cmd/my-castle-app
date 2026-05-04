@@ -67,6 +67,99 @@ const jaSort = (a: string, b: string) =>
 
 // ─── 座標取得ユーティリティ ────────────────────────────
 
+
+// 市区町村→旧国名（複数国にまたがる県のみ詳細対応）
+const CITY_TO_PROVINCE: Record<string, string> = {
+  // 兵庫県
+  "神戸市":"摂津","尼崎市":"摂津","西宮市":"摂津","芦屋市":"摂津","伊丹市":"摂津","宝塚市":"摂津","川西市":"摂津","猪名川町":"摂津",
+  "姫路市":"播磨","明石市":"播磨","加古川市":"播磨","高砂市":"播磨","加西市":"播磨","加東市":"播磨","西脇市":"播磨","小野市":"播磨",
+  "三木市":"播磨","相生市":"播磨","赤穂市":"播磨","たつの市":"播磨","宍粟市":"播磨","佐用町":"播磨","太子町":"播磨","稲美町":"播磨","播磨町":"播磨",
+  "豊岡市":"但馬","養父市":"但馬","朝来市":"但馬","香美町":"但馬","新温泉町":"但馬",
+  "丹波篠山市":"丹波","丹波市":"丹波",
+  "淡路市":"淡路","洲本市":"淡路","南あわじ市":"淡路",
+  // 京都府
+  "京都市":"山城","宇治市":"山城","城陽市":"山城","向日市":"山城","長岡京市":"山城","八幡市":"山城","京田辺市":"山城","木津川市":"山城",
+  "亀岡市":"丹波","南丹市":"丹波","京丹波町":"丹波",
+  "福知山市":"丹後","舞鶴市":"丹後","綾部市":"丹後","宮津市":"丹後","京丹後市":"丹後","伊根町":"丹後","与謝野町":"丹後",
+  // 岐阜県
+  "岐阜市":"美濃","大垣市":"美濃","関市":"美濃","美濃市":"美濃","羽島市":"美濃","各務原市":"美濃","山県市":"美濃","瑞穂市":"美濃",
+  "本巣市":"美濃","海津市":"美濃","養老町":"美濃","垂井町":"美濃","関ケ原町":"美濃","神戸町":"美濃","輪之内町":"美濃","安八町":"美濃",
+  "笠松町":"美濃","岐南町":"美濃","多治見市":"美濃","中津川市":"美濃","瑞浪市":"美濃","恵那市":"美濃","土岐市":"美濃","可児市":"美濃",
+  "御嵩町":"美濃","美濃加茂市":"美濃","坂祝町":"美濃","富加町":"美濃","川辺町":"美濃","七宗町":"美濃","八百津町":"美濃","白川町":"美濃","東白川村":"美濃",
+  "高山市":"飛騨","飛騨市":"飛騨","下呂市":"飛騨","白川村":"飛騨",
+  // 静岡県
+  "浜松市":"遠江","磐田市":"遠江","袋井市":"遠江","掛川市":"遠江","菊川市":"遠江","御前崎市":"遠江","湖西市":"遠江",
+  "森町":"遠江","浜松市天竜区":"遠江",
+  "静岡市":"駿河","藤枝市":"駿河","焼津市":"駿河","島田市":"駿河","牧之原市":"駿河","吉田町":"駿河",
+  "沼津市":"伊豆","熱海市":"伊豆","三島市":"伊豆","富士宮市":"駿河","伊東市":"伊豆","富士市":"駿河",
+  "下田市":"伊豆","伊豆市":"伊豆","伊豆の国市":"伊豆","東伊豆町":"伊豆","河津町":"伊豆","南伊豆町":"伊豆","松崎町":"伊豆","西伊豆町":"伊豆",
+  "函南町":"伊豆","清水町":"駿河","長泉町":"駿河","小山町":"駿河",
+  // 愛知県
+  "名古屋市":"尾張","一宮市":"尾張","春日井市":"尾張","犬山市":"尾張","江南市":"尾張","小牧市":"尾張","稲沢市":"尾張","尾張旭市":"尾張",
+  "岩倉市":"尾張","豊明市":"尾張","日進市":"尾張","清須市":"尾張","北名古屋市":"尾張","弥富市":"尾張","あま市":"尾張","長久手市":"尾張",
+  "東郷町":"尾張","豊山町":"尾張","大口町":"尾張","扶桑町":"尾張","大治町":"尾張","蟹江町":"尾張","飛島村":"尾張",
+  "豊橋市":"三河","岡崎市":"三河","豊川市":"三河","蒲郡市":"三河","新城市":"三河","田原市":"三河","豊田市":"三河","刈谷市":"三河",
+  "安城市":"三河","西尾市":"三河","知立市":"三河","高浜市":"三河","みよし市":"三河","碧南市":"三河",
+  "幸田町":"三河","設楽町":"三河","東栄町":"三河","豊根村":"三河",
+  "半田市":"尾張","常滑市":"尾張","東海市":"尾張","大府市":"尾張","知多市":"尾張","阿久比町":"尾張","東浦町":"尾張","南知多町":"尾張","美浜町":"尾張","武豊町":"尾張",
+  // 三重県
+  "津市":"伊勢","松阪市":"伊勢","伊勢市":"伊勢","多気町":"伊勢","明和町":"伊勢","大台町":"伊勢",
+  "四日市市":"伊勢","桑名市":"伊勢","鈴鹿市":"伊勢","亀山市":"伊勢","いなべ市":"伊勢","木曽岬町":"伊勢","東員町":"伊勢","菰野町":"伊勢","朝日町":"伊勢","川越町":"伊勢",
+  "鳥羽市":"志摩","志摩市":"志摩","南伊勢町":"志摩",
+  "伊賀市":"伊賀","名張市":"伊賀",
+  "尾鷲市":"紀伊","熊野市":"紀伊","紀北町":"紀伊","御浜町":"紀伊","紀宝町":"紀伊",
+  // 新潟県
+  "新潟市":"越後","長岡市":"越後","三条市":"越後","柏崎市":"越後","新発田市":"越後","小千谷市":"越後","加茂市":"越後","十日町市":"越後",
+  "見附市":"越後","燕市":"越後","糸魚川市":"越後","妙高市":"越後","五泉市":"越後","上越市":"越後","阿賀野市":"越後","佐渡市":"佐渡",
+  "魚沼市":"越後","南魚沼市":"越後","胎内市":"越後",
+  // 福岡県
+  "福岡市":"筑前","北九州市":"豊前","久留米市":"筑後","直方市":"筑前","飯塚市":"筑前","田川市":"筑前","柳川市":"筑後","八女市":"筑後",
+  "筑後市":"筑後","大川市":"筑後","行橋市":"豊前","豊前市":"豊前","中間市":"筑前","小郡市":"筑前","筑紫野市":"筑前","春日市":"筑前",
+  "大野城市":"筑前","宗像市":"筑前","太宰府市":"筑前","古賀市":"筑前","福津市":"筑前","うきは市":"筑後","宮若市":"筑前","嘉麻市":"筑前",
+  "朝倉市":"筑前","みやま市":"筑後","糸島市":"筑前","那珂川市":"筑前",
+  // 長崎県
+  "長崎市":"肥前","佐世保市":"肥前","島原市":"肥前","諫早市":"肥前","大村市":"肥前","平戸市":"肥前","松浦市":"肥前","対馬市":"対馬",
+  "壱岐市":"壱岐","五島市":"肥前","西海市":"肥前","雲仙市":"肥前","南島原市":"肥前",
+  // 大分県
+  "大分市":"豊後","別府市":"豊後","中津市":"豊前","日田市":"豊後","佐伯市":"豊後","臼杵市":"豊後","津久見市":"豊後","竹田市":"豊後",
+  "豊後高田市":"豊前","杵築市":"豊後","宇佐市":"豊前","豊後大野市":"豊後","由布市":"豊後","国東市":"豊前",
+  // 福島県
+  "福島市":"陸奥","郡山市":"岩代","いわき市":"磐城","白河市":"岩代","須賀川市":"岩代","喜多方市":"陸奥","相馬市":"陸奥","二本松市":"岩代",
+  "田村市":"岩代","南相馬市":"陸奥","伊達市":"陸奥","本宮市":"岩代","桑折町":"陸奥","国見町":"陸奥","川俣町":"陸奥","大玉村":"岩代",
+  "鏡石町":"岩代","天栄村":"岩代","西郷村":"陸奥","泉崎村":"陸奥","中島村":"陸奥","矢吹町":"岩代","棚倉町":"岩代","矢祭町":"岩代",
+  "塙町":"岩代","鮫川村":"岩代","石川町":"岩代","玉川村":"岩代","平田村":"岩代","浅川町":"岩代","古殿町":"岩代","三春町":"岩代","小野町":"岩代",
+  "富岡町":"磐城","川内村":"磐城","大熊町":"磐城","双葉町":"磐城","浪江町":"磐城","葛尾村":"磐城","新地町":"陸奥","飯舘村":"陸奥",
+  "広野町":"磐城","楢葉町":"磐城","川俣町":"陸奥","只見町":"岩代","南会津町":"岩代","下郷町":"岩代","檜枝岐村":"岩代","北塩原村":"陸奥",
+  "西会津町":"陸奥","磐梯町":"陸奥","猪苗代町":"陸奥","会津坂下町":"陸奥","湯川村":"陸奥","柳津町":"陸奥","三島町":"陸奥","金山町":"陸奥","昭和村":"陸奥","会津美里町":"陸奥",
+  // 島根県
+  "松江市":"出雲","浜田市":"石見","出雲市":"出雲","益田市":"石見","大田市":"石見","安来市":"出雲","江津市":"石見","雲南市":"出雲","隠岐の島町":"隠岐","海士町":"隠岐","西ノ島町":"隠岐","知夫村":"隠岐",
+  // 岡山県
+  "岡山市":"備前","倉敷市":"備中","津山市":"美作","玉野市":"備前","笠岡市":"備中","井原市":"備中","総社市":"備中","高梁市":"備中","新見市":"備中","備前市":"備前","瀬戸内市":"備前","赤磐市":"備前","真庭市":"美作","美作市":"美作","浅口市":"備中",
+  // 広島県
+  "広島市":"安芸","福山市":"備後","三原市":"備後","尾道市":"備後","呉市":"安芸","東広島市":"安芸","廿日市市":"安芸","安芸高田市":"安芸","江田島市":"安芸","府中市":"備後","三次市":"備後","庄原市":"備後","大竹市":"安芸",
+};
+
+// 都道府県→旧国名（1国のみの県）
+const PREF_TO_PROVINCE_SINGLE: Record<string, string> = {
+  "北海道":"蝦夷","栃木県":"下野","群馬県":"上野","埼玉県":"武蔵","東京都":"武蔵",
+  "富山県":"越中","山梨県":"甲斐","長野県":"信濃","滋賀県":"近江","奈良県":"大和",
+  "和歌山県":"紀伊","徳島県":"阿波","香川県":"讃岐","愛媛県":"伊予","高知県":"土佐","熊本県":"肥後","宮崎県":"日向","沖縄県":"琉球",
+};
+
+// 都道府県+市区町村から旧国名を取得
+const getProvinceFromPref = (pref: string, city?: string): string => {
+  // 1. 市区町村レベルで検索
+  if (city) {
+    const cityProvince = CITY_TO_PROVINCE[city];
+    if (cityProvince) return cityProvince;
+  }
+  // 2. 1県1国の場合
+  const single = PREF_TO_PROVINCE_SINGLE[pref];
+  if (single) return single;
+  // 3. 複数国の県はフォールバックなし（市区町村不明なら空欄のまま）
+  return "";
+};
+
 // 日本国内の座標かチェック（おおよその範囲）
 const isInJapan = (lat: number, lng: number): boolean =>
   lat >= 24 && lat <= 46 && lng >= 122 && lng <= 154;
@@ -1130,7 +1223,7 @@ export default function App() {
     finally { setPhotoLoading(false); if (photoInputRef.current) photoInputRef.current.value = ""; }
   };
 
-  // ─── 住所から都道府県を自動取得 ─────────────────────────
+  // ─── 住所から都道府県・旧国名を自動取得 ──────────────────
   useEffect(() => {
     if (!formData.address || formData.address.length < 4) return;
     const timer = setTimeout(async () => {
@@ -1139,16 +1232,23 @@ export default function App() {
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ address: formData.address, region: "jp" }, (results: any, status: any) => {
         if (status !== "OK" || !results?.[0]) return;
-        // 都道府県コンポーネントを探す
-        const prefComp = results[0].address_components?.find((c: any) =>
-          c.types.includes("administrative_area_level_1")
+        const comps = results[0].address_components || [];
+        const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
+        const cityComp = comps.find((c: any) =>
+          c.types.includes("locality") || c.types.includes("administrative_area_level_2")
         );
         if (prefComp) {
           const prefName = prefComp.long_name;
-          setFormData(f => ({ ...f, pref: prefName }));
+          const cityName = cityComp?.long_name || "";
+          const province = getProvinceFromPref(prefName, cityName);
+          setFormData(f => ({
+            ...f,
+            pref: prefName,
+            province: f.province ? f.province : province,
+          }));
         }
       });
-    }, 800); // 800ms debounce
+    }, 800);
     return () => clearTimeout(timer);
   }, [formData.address]);
 
@@ -1272,6 +1372,35 @@ export default function App() {
   };
 
 
+
+  // ─── 行きたい城フォーム：住所から都道府県・旧国名を自動取得 ──
+  useEffect(() => {
+    if (!wishFormData.address || wishFormData.address.length < 4) return;
+    const timer = setTimeout(async () => {
+      const google = (window as any).google;
+      if (!google?.maps) return;
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ address: wishFormData.address, region: "jp" }, (results: any, status: any) => {
+        if (status !== "OK" || !results?.[0]) return;
+        const comps = results[0].address_components || [];
+        const prefComp = comps.find((c: any) => c.types.includes("administrative_area_level_1"));
+        const cityComp = comps.find((c: any) =>
+          c.types.includes("locality") || c.types.includes("administrative_area_level_2")
+        );
+        if (prefComp) {
+          const prefName = prefComp.long_name;
+          const cityName = cityComp?.long_name || "";
+          const province = getProvinceFromPref(prefName, cityName);
+          setWishFormData(f => ({
+            ...f,
+            pref: prefName,
+            province: f.province ? f.province : province,
+          }));
+        }
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [wishFormData.address]);
 
   const toggleSort = (key: string) =>
     setSortConfig((p) => ({ key, direction: p.key === key && p.direction === "desc" ? "asc" : "desc" }));
@@ -1749,12 +1878,25 @@ export default function App() {
                   <input id="f-address" name="address" placeholder="住所を入力（都道府県は自動取得されます）"
                     className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                     value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} />
-                  {formData.pref && (
-                    <p className="text-[10px] text-stone-400 ml-1 flex items-center gap-1">
-                      <span className="text-green-500">✓</span> 都道府県: <span className="font-black text-stone-600">{formData.pref}</span>
-                      <button type="button" onClick={() => setFormData(f => ({...f, pref: ""}))}
-                        className="ml-1 text-stone-300 hover:text-stone-500">✕</button>
-                    </p>
+                  {(formData.pref || formData.province) && (
+                    <div className="flex items-center gap-3 ml-1">
+                      {formData.pref && (
+                        <p className="text-[10px] text-stone-400 flex items-center gap-1">
+                          <span className="text-green-500">✓</span>
+                          <span className="font-black text-stone-600">{formData.pref}</span>
+                          <button type="button" onClick={() => setFormData(f => ({...f, pref: ""}))}
+                            className="text-stone-300 hover:text-stone-500">✕</button>
+                        </p>
+                      )}
+                      {formData.province && (
+                        <p className="text-[10px] text-stone-400 flex items-center gap-1">
+                          <span className="text-green-500">✓</span>
+                          <span className="font-black text-stone-600">{formData.province}国</span>
+                          <button type="button" onClick={() => setFormData(f => ({...f, province: ""}))}
+                            className="text-stone-300 hover:text-stone-500">✕</button>
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
 
@@ -1849,6 +1991,34 @@ export default function App() {
                     value={wishFormData.name} onChange={(e) => setWishFormData({ ...wishFormData, name: e.target.value })} />
                 </div>
 
+                {/* 住所（都道府県・旧国名を自動取得） */}
+                <div className="space-y-1.5">
+                  <label htmlFor="w-address" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">住所</label>
+                  <input id="w-address" name="address" placeholder="住所を入力（都道府県・旧国名は自動取得）"
+                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
+                    value={wishFormData.address} onChange={(e) => setWishFormData({ ...wishFormData, address: e.target.value })} />
+                  {(wishFormData.pref || wishFormData.province) && (
+                    <div className="flex items-center gap-3 ml-1">
+                      {wishFormData.pref && (
+                        <p className="text-[10px] text-stone-400 flex items-center gap-1">
+                          <span className="text-green-500">✓</span>
+                          <span className="font-black text-stone-600">{wishFormData.pref}</span>
+                          <button type="button" onClick={() => setWishFormData(f => ({...f, pref: ""}))}
+                            className="text-stone-300 hover:text-stone-500">✕</button>
+                        </p>
+                      )}
+                      {wishFormData.province && (
+                        <p className="text-[10px] text-stone-400 flex items-center gap-1">
+                          <span className="text-green-500">✓</span>
+                          <span className="font-black text-stone-600">{wishFormData.province}国</span>
+                          <button type="button" onClick={() => setWishFormData(f => ({...f, province: ""}))}
+                            className="text-stone-300 hover:text-stone-500">✕</button>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* 都道府県・旧国名（手動入力用） */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label htmlFor="w-pref" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">都道府県</label>
@@ -1862,14 +2032,6 @@ export default function App() {
                       className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
                       value={wishFormData.province} onChange={(e) => setWishFormData({ ...wishFormData, province: e.target.value })} />
                   </div>
-                </div>
-
-                {/* ③ 住所追加 */}
-                <div className="space-y-1.5">
-                  <label htmlFor="w-address" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">住所</label>
-                  <input id="w-address" name="address" placeholder="例: 長野県松本市丸の内4-1"
-                    className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent outline-none text-sm focus:bg-white focus:border-stone-200 transition-colors"
-                    value={wishFormData.address} onChange={(e) => setWishFormData({ ...wishFormData, address: e.target.value })} />
                 </div>
 
                 <div className="space-y-1.5">
