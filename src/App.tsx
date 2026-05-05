@@ -1333,10 +1333,22 @@ export default function App() {
       await setDoc(ref, {
         name: w.name, pref: w.pref||"", province: w.province||"",
         address: w.address||"", aka: "", visitDate: "", battleYear: "",
-        rating: 5, memo: w.memo||"", photo: "", recordType: type, updatedAt: new Date().toISOString(),
+        rating: 5, memo: w.memo||"", photo: "", recordType: type,
+        // 行きたい城の座標・手動設定フラグも引き継ぐ
+        lat: w.lat||null, lng: w.lng||null, manualCoord: w.manualCoord||false,
+        updatedAt: new Date().toISOString(),
       });
       await deleteDoc(doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", w.id));
-      setCurrentPage("list"); setRecordTab(type);
+      // 移動先カードを表示・ハイライト
+      const newId = ref.id;
+      setCurrentPage("list");
+      setRecordTab(type);
+      setSearchTerm("");
+      setHighlightId(newId);
+      setTimeout(() => {
+        const el = document.getElementById(`castle-card-${newId}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 500);
     } catch (err) { console.error(err); }
   };
 
