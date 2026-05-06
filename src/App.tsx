@@ -514,8 +514,9 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const StatsPage = ({ castles }: { castles: any[] }) => {
   const visited = castles.filter(c => c.recordType !== "battlefield");
   const battlefields = castles.filter(c => c.recordType === "battlefield");
-  const hyakuCount = visited.filter(c => c.meijoCategory === "100名城").length;
-  const zokuCount = visited.filter(c => c.meijoCategory === "続100名城").length;
+  // 城名でリスト照合（meijoCategory保存値に依存しない正確なカウント）
+  const hyakuCount = visited.filter(c => HYAKU_MEIJO.has(c.name)).length;
+  const zokuCount  = visited.filter(c => ZOKU_MEIJO.has(c.name)).length;
 
   // 訪問年別集計
   const yearData = useMemo(() => {
