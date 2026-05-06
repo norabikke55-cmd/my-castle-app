@@ -52,78 +52,130 @@ const PRIORITY_ORDER: Record<WishPriority, number> = { "高": 0, "中": 1, "低"
 // ─── 100名城・続100名城リスト（メモリ内のみ・Firestore容量不使用） ────
 type MeijoCategory = "100名城" | "続100名城" | "";
 
-// 日本100名城（公益財団法人日本城郭協会 公式リスト）
-const HYAKU_MEIJO = new Set([
-  // 北海道・東北
-  "根室半島チャシ跡群","五稜郭","松前城","弘前城","根城","盛岡城","多賀城","仙台城",
-  "久保田城","山形城","二本松城","会津若松城","白河小峰城",
-  // 関東
-  "水戸城","足利氏館","箕輪城","金山城","鉢形城","川越城","佐倉城",
-  "江戸城","八王子城","小田原城",
-  // 甲信越
-  "武田氏館","甲府城","松代城","上田城","小諸城","松本城","高遠城","新発田城","春日山城",
-  // 北陸
-  "高岡城","七尾城","金沢城","丸岡城","一乗谷城",
-  // 東海
-  "岩村城","岐阜城","犬山城","名古屋城","岡崎城","掛川城","駿府城","山中城","韮山城",
-  // 近畿
-  "彦根城","安土城","観音寺城","二条城","大阪城","千早城","和歌山城","高取城",
-  "伊賀上野城","伊勢亀山城","松阪城",
-  // 中国
-  "鳥取城","米子城","月山富田城","松江城","津山城","備中松山城","鬼ノ城","岡山城",
-  "福山城","広島城","吉田郡山城","津和野城","萩城","岩国城",
-  // 四国
-  "徳島城","高松城","丸亀城","今治城","湯築城","松山城","大洲城","宇和島城","高知城",
-  // 九州・沖縄
-  "福岡城","大野城","名護屋城","吉野ヶ里","佐賀城","唐津城","平戸城","島原城",
-  "熊本城","人吉城","大分府内城","岡城","飫肥城","鹿児島城","志布志城",
-  "今帰仁城","中城城","首里城","座喜味城",
-  // 別名・通称（ユーザーが入力しやすい形）
-  "躑躅ヶ崎館","青葉城","鶴ヶ城"
-]);
+// ─── 100名城・続100名城 正式リスト（日本城郭協会 公式データ）─────
+// [no, name, pref] の配列。Setは城名検索用、配列は未訪問カード生成用
+type MeijoEntry = { no: number; name: string; pref: string };
 
-// 続日本100名城（公益財団法人日本城郭協会 公式リスト No.101〜200）
-const ZOKU_MEIJO = new Set([
-  // 北海道(101-102)
-  "志苔館","上ノ国勝山館",
-  // 東北(103-111)
-  "浪岡城","九戸城","白石城","脇本城","秋田城","鶴ヶ岡城","米沢城","三春城","向羽黒山城",
-  // 関東(112-126)
-  "笠間城","土浦城","唐沢山城","名胡桃城","沼田城","岩櫃城",
-  "忍城","杉山城","菅谷館","本佐倉城","大多喜城","滝山城","品川台場","小机城","石垣山城",
-  // 甲信越(127-133)
-  "新府城","要害山城","龍岡城","高島城","村上城","高田城","鮫ケ尾城",
-  // 北陸(134-140)
-  "富山城","増山城","鳥越城","福井城","越前大野城","佐柿国吉城","玄蕃尾城",
-  // 東海(141-154)
-  "郡上八幡城","苗木城","美濃金山城","大垣城","興国寺城",
-  "諏訪原城","高天神城","浜松城","小牧山城","古宮城",
-  "吉田城","津城","多気北畠氏城館","田丸城",
-  // 近畿(155-170)
-  "赤木城","大和郡山城","宇陀松山城",
-  "膳所城","水口岡山城","八幡山城","大溝城",
-  "黒井城","篠山城","竹田城","洲本城",
-  "芥川山城","高屋城","飯盛山城","岸和田城","丹波亀山城",
-  // 近畿・中国(171-181)
-  "赤穂城","龍野城","三木城","新宮城",
-  "鳥取城","若桜鬼ヶ城","浜田城","三原城","新高山城","若山城",
-  // 四国(182-186)
-  "引田城","勝瑞城","天霧城","河後森城","中村城",
-  // 九州(187-197)
-  "小倉城","久留米城","大友府内町",
-  "角牟礼城","岡城","延岡城","佐土原城",
-  "知覧城","出水城","加世田城",
-  // 沖縄(198-199)
-  "勝連城","糸数城"
-]);
+const HYAKU_LIST: MeijoEntry[] = [
+  {no:1,name:"根室半島チャシ跡群",pref:"北海道"},{no:2,name:"五稜郭",pref:"北海道"},{no:3,name:"松前城",pref:"北海道"},
+  {no:4,name:"弘前城",pref:"青森県"},{no:5,name:"根城",pref:"青森県"},
+  {no:6,name:"盛岡城",pref:"岩手県"},
+  {no:7,name:"多賀城",pref:"宮城県"},{no:8,name:"仙台城",pref:"宮城県"},
+  {no:9,name:"久保田城",pref:"秋田県"},
+  {no:10,name:"山形城",pref:"山形県"},
+  {no:11,name:"二本松城",pref:"福島県"},{no:12,name:"会津若松城",pref:"福島県"},{no:13,name:"白河小峰城",pref:"福島県"},
+  {no:14,name:"水戸城",pref:"茨城県"},
+  {no:15,name:"足利氏館",pref:"栃木県"},
+  {no:16,name:"箕輪城",pref:"群馬県"},{no:17,name:"金山城",pref:"群馬県"},
+  {no:18,name:"鉢形城",pref:"埼玉県"},{no:19,name:"川越城",pref:"埼玉県"},
+  {no:20,name:"佐倉城",pref:"千葉県"},
+  {no:21,name:"江戸城",pref:"東京都"},{no:22,name:"八王子城",pref:"東京都"},
+  {no:23,name:"小田原城",pref:"神奈川県"},
+  {no:24,name:"武田氏館",pref:"山梨県"},{no:25,name:"甲府城",pref:"山梨県"},
+  {no:26,name:"松代城",pref:"長野県"},{no:27,name:"上田城",pref:"長野県"},{no:28,name:"小諸城",pref:"長野県"},{no:29,name:"松本城",pref:"長野県"},{no:30,name:"高遠城",pref:"長野県"},
+  {no:31,name:"新発田城",pref:"新潟県"},{no:32,name:"春日山城",pref:"新潟県"},
+  {no:33,name:"高岡城",pref:"富山県"},
+  {no:34,name:"七尾城",pref:"石川県"},{no:35,name:"金沢城",pref:"石川県"},
+  {no:36,name:"丸岡城",pref:"福井県"},{no:37,name:"一乗谷城",pref:"福井県"},
+  {no:38,name:"岩村城",pref:"岐阜県"},{no:39,name:"岐阜城",pref:"岐阜県"},
+  {no:40,name:"山中城",pref:"静岡県"},{no:41,name:"駿府城",pref:"静岡県"},{no:42,name:"掛川城",pref:"静岡県"},
+  {no:43,name:"犬山城",pref:"愛知県"},{no:44,name:"名古屋城",pref:"愛知県"},{no:45,name:"岡崎城",pref:"愛知県"},{no:46,name:"長篠城",pref:"愛知県"},
+  {no:47,name:"伊賀上野城",pref:"三重県"},{no:48,name:"松阪城",pref:"三重県"},
+  {no:49,name:"小谷城",pref:"滋賀県"},{no:50,name:"彦根城",pref:"滋賀県"},{no:51,name:"安土城",pref:"滋賀県"},{no:52,name:"観音寺城",pref:"滋賀県"},
+  {no:53,name:"二条城",pref:"京都府"},
+  {no:54,name:"大阪城",pref:"大阪府"},{no:55,name:"千早城",pref:"大阪府"},
+  {no:56,name:"竹田城",pref:"兵庫県"},{no:57,name:"篠山城",pref:"兵庫県"},{no:58,name:"明石城",pref:"兵庫県"},{no:59,name:"姫路城",pref:"兵庫県"},{no:60,name:"赤穂城",pref:"兵庫県"},
+  {no:61,name:"高取城",pref:"奈良県"},
+  {no:62,name:"和歌山城",pref:"和歌山県"},
+  {no:63,name:"鳥取城",pref:"鳥取県"},
+  {no:64,name:"松江城",pref:"島根県"},{no:65,name:"月山富田城",pref:"島根県"},{no:66,name:"津和野城",pref:"島根県"},
+  {no:67,name:"津山城",pref:"岡山県"},{no:68,name:"備中松山城",pref:"岡山県"},{no:69,name:"鬼ノ城",pref:"岡山県"},{no:70,name:"岡山城",pref:"岡山県"},
+  {no:71,name:"福山城",pref:"広島県"},{no:72,name:"郡山城",pref:"広島県"},{no:73,name:"広島城",pref:"広島県"},
+  {no:74,name:"岩国城",pref:"山口県"},{no:75,name:"萩城",pref:"山口県"},
+  {no:76,name:"徳島城",pref:"徳島県"},
+  {no:77,name:"高松城",pref:"香川県"},{no:78,name:"丸亀城",pref:"香川県"},
+  {no:79,name:"今治城",pref:"愛媛県"},{no:80,name:"湯築城",pref:"愛媛県"},{no:81,name:"松山城",pref:"愛媛県"},{no:82,name:"大洲城",pref:"愛媛県"},{no:83,name:"宇和島城",pref:"愛媛県"},
+  {no:84,name:"高知城",pref:"高知県"},
+  {no:85,name:"福岡城",pref:"福岡県"},{no:86,name:"大野城",pref:"福岡県"},
+  {no:87,name:"名護屋城",pref:"佐賀県"},{no:88,name:"吉野ヶ里",pref:"佐賀県"},{no:89,name:"佐賀城",pref:"佐賀県"},
+  {no:90,name:"平戸城",pref:"長崎県"},{no:91,name:"島原城",pref:"長崎県"},
+  {no:92,name:"熊本城",pref:"熊本県"},{no:93,name:"人吉城",pref:"熊本県"},
+  {no:94,name:"大分府内城",pref:"大分県"},{no:95,name:"岡城",pref:"大分県"},
+  {no:96,name:"飫肥城",pref:"宮崎県"},
+  {no:97,name:"鹿児島城",pref:"鹿児島県"},
+  {no:98,name:"今帰仁城",pref:"沖縄県"},{no:99,name:"中城城",pref:"沖縄県"},{no:100,name:"首里城",pref:"沖縄県"},
+];
+
+const ZOKU_LIST: MeijoEntry[] = [
+  {no:101,name:"志苔館",pref:"北海道"},{no:102,name:"上ノ国勝山館",pref:"北海道"},
+  {no:103,name:"浪岡城",pref:"青森県"},
+  {no:104,name:"九戸城",pref:"岩手県"},
+  {no:105,name:"白石城",pref:"宮城県"},
+  {no:106,name:"脇本城",pref:"秋田県"},{no:107,name:"秋田城",pref:"秋田県"},
+  {no:108,name:"鶴ヶ岡城",pref:"山形県"},{no:109,name:"米沢城",pref:"山形県"},
+  {no:110,name:"三春城",pref:"福島県"},{no:111,name:"向羽黒山城",pref:"福島県"},
+  {no:112,name:"笠間城",pref:"茨城県"},{no:113,name:"土浦城",pref:"茨城県"},
+  {no:114,name:"唐沢山城",pref:"栃木県"},
+  {no:115,name:"名胡桃城",pref:"群馬県"},{no:116,name:"沼田城",pref:"群馬県"},{no:117,name:"岩櫃城",pref:"群馬県"},
+  {no:118,name:"忍城",pref:"埼玉県"},{no:119,name:"杉山城",pref:"埼玉県"},{no:120,name:"菅谷館",pref:"埼玉県"},
+  {no:121,name:"本佐倉城",pref:"千葉県"},{no:122,name:"大多喜城",pref:"千葉県"},
+  {no:123,name:"滝山城",pref:"東京都"},{no:124,name:"品川台場",pref:"東京都"},
+  {no:125,name:"小机城",pref:"神奈川県"},{no:126,name:"石垣山城",pref:"神奈川県"},
+  {no:127,name:"新府城",pref:"山梨県"},{no:128,name:"要害山城",pref:"山梨県"},
+  {no:129,name:"龍岡城",pref:"長野県"},{no:130,name:"高島城",pref:"長野県"},
+  {no:131,name:"村上城",pref:"新潟県"},{no:132,name:"高田城",pref:"新潟県"},{no:133,name:"鮫ケ尾城",pref:"新潟県"},
+  {no:134,name:"富山城",pref:"富山県"},{no:135,name:"増山城",pref:"富山県"},
+  {no:136,name:"鳥越城",pref:"石川県"},
+  {no:137,name:"福井城",pref:"福井県"},{no:138,name:"越前大野城",pref:"福井県"},{no:139,name:"佐柿国吉城",pref:"福井県"},{no:140,name:"玄蕃尾城",pref:"福井県"},
+  {no:141,name:"郡上八幡城",pref:"岐阜県"},{no:142,name:"苗木城",pref:"岐阜県"},{no:143,name:"美濃金山城",pref:"岐阜県"},{no:144,name:"大垣城",pref:"岐阜県"},
+  {no:145,name:"興国寺城",pref:"静岡県"},{no:146,name:"諏訪原城",pref:"静岡県"},{no:147,name:"高天神城",pref:"静岡県"},{no:148,name:"浜松城",pref:"静岡県"},
+  {no:149,name:"小牧山城",pref:"愛知県"},{no:150,name:"古宮城",pref:"愛知県"},{no:151,name:"吉田城",pref:"愛知県"},
+  {no:152,name:"津城",pref:"三重県"},{no:153,name:"多気北畠氏城館",pref:"三重県"},{no:154,name:"田丸城",pref:"三重県"},{no:155,name:"赤木城",pref:"三重県"},
+  {no:156,name:"鎌刃城",pref:"滋賀県"},{no:157,name:"八幡山城",pref:"滋賀県"},
+  {no:158,name:"福知山城",pref:"京都府"},
+  {no:159,name:"芥川山城",pref:"大阪府"},{no:160,name:"飯盛城",pref:"大阪府"},{no:161,name:"岸和田城",pref:"大阪府"},
+  {no:162,name:"出石城・有子山城",pref:"兵庫県"},{no:163,name:"黒井城",pref:"兵庫県"},{no:164,name:"洲本城",pref:"兵庫県"},
+  {no:165,name:"大和郡山城",pref:"奈良県"},{no:166,name:"宇陀松山城",pref:"奈良県"},
+  {no:167,name:"新宮城",pref:"和歌山県"},
+  {no:168,name:"若桜鬼ケ城",pref:"鳥取県"},{no:169,name:"米子城",pref:"鳥取県"},
+  {no:170,name:"浜田城",pref:"島根県"},
+  {no:171,name:"備中高松城",pref:"岡山県"},
+  {no:172,name:"三原城",pref:"広島県"},{no:173,name:"新高山城",pref:"広島県"},
+  {no:174,name:"大内氏館・高嶺城",pref:"山口県"},
+  {no:175,name:"勝瑞城",pref:"徳島県"},{no:176,name:"一宮城",pref:"徳島県"},
+  {no:177,name:"引田城",pref:"香川県"},
+  {no:178,name:"能島城",pref:"愛媛県"},{no:179,name:"河後森城",pref:"愛媛県"},
+  {no:180,name:"岡豊城",pref:"高知県"},
+  {no:181,name:"小倉城",pref:"福岡県"},{no:182,name:"水城",pref:"福岡県"},{no:183,name:"久留米城",pref:"福岡県"},{no:184,name:"基肄城",pref:"福岡県"},
+  {no:185,name:"唐津城",pref:"佐賀県"},
+  {no:186,name:"金田城",pref:"長崎県"},{no:187,name:"福江城",pref:"長崎県"},{no:188,name:"原城",pref:"長崎県"},
+  {no:189,name:"鞠智城",pref:"熊本県"},{no:190,name:"八代城",pref:"熊本県"},
+  {no:191,name:"中津城",pref:"大分県"},{no:192,name:"角牟礼城",pref:"大分県"},{no:193,name:"臼杵城",pref:"大分県"},{no:194,name:"佐伯城",pref:"大分県"},
+  {no:195,name:"延岡城",pref:"宮崎県"},{no:196,name:"佐土原城",pref:"宮崎県"},
+  {no:197,name:"志布志城",pref:"鹿児島県"},{no:198,name:"知覧城",pref:"鹿児島県"},
+  {no:199,name:"座喜味城",pref:"沖縄県"},{no:200,name:"勝連城",pref:"沖縄県"},
+];
+
+// Setはdetect用（高速照合）
+const HYAKU_MEIJO = new Set(HYAKU_LIST.map(e => e.name));
+const ZOKU_MEIJO  = new Set(ZOKU_LIST.map(e => e.name));
+// 別名対応
+const MEIJO_ALIAS: Record<string, string> = {
+  "躑躅ヶ崎館": "武田氏館", "青葉城": "仙台城", "鶴ヶ城": "会津若松城",
+  "小峰城": "白河小峰城", "稲葉山城": "岐阜城", "金亀城": "彦根城",
+  "白鷺城": "姫路城", "烏城": "岡山城", "鯉城": "広島城",
+  "銀杏城": "熊本城", "鶴丸城": "鹿児島城",
+};
+
+
 
 // 名城区分を判定（城名で自動マッチング）
 const detectMeijo = (name: string): MeijoCategory => {
   if (!name) return "";
-  // 「城」「館」等の末尾を除いた名称でも照合
   const trimmed = name.replace(/\s/g, "");
-  if (HYAKU_MEIJO.has(trimmed)) return "100名城";
-  if (ZOKU_MEIJO.has(trimmed)) return "続100名城";
+  const canonical = MEIJO_ALIAS[trimmed] || trimmed;
+  if (HYAKU_MEIJO.has(canonical)) return "100名城";
+  if (ZOKU_MEIJO.has(canonical)) return "続100名城";
   return "";
 };
 
@@ -1131,14 +1183,18 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
 
 // ─── ウィッシュリストページ ─────────────────────────────
 
-const WishlistPage = ({ wishes, onEdit, onDelete, onVisited, onMapFocus }: {
+const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus, onMeijoVisited }: {
   wishes: any[];
+  castles: any[];
   onEdit: (w: any) => void;
   onDelete: (id: string, name: string) => void;
   onVisited: (w: any) => void;
   onMapFocus: (id: string) => void;
+  onMeijoVisited: (entry: MeijoEntry, category: MeijoCategory) => void;
 }) => {
   const [sortKey, setSortKey] = useState<WishSortKey>("priority");
+  const [showHyaku, setShowHyaku] = useState(true);
+  const [showZoku, setShowZoku] = useState(true);
 
   const sorted = useMemo(() => {
     return [...wishes].sort((a, b) => {
@@ -1155,6 +1211,22 @@ const WishlistPage = ({ wishes, onEdit, onDelete, onVisited, onMapFocus }: {
       }
     });
   }, [wishes, sortKey]);
+
+  // 訪問済み・行きたい個別入力済みの城名セット（未訪問フィルタ用）
+  const visitedOrWishedNames = useMemo(() => {
+    const s = new Set<string>();
+    castles.forEach((c: any) => s.add(c.name));
+    wishes.forEach((w: any) => s.add(w.name));
+    return s;
+  }, [castles, wishes]);
+
+  // 未訪問の100名城・続100名城
+  const unvisitedHyaku = useMemo(() =>
+    HYAKU_LIST.filter(e => !visitedOrWishedNames.has(e.name)),
+    [visitedOrWishedNames]);
+  const unvisitedZoku = useMemo(() =>
+    ZOKU_LIST.filter(e => !visitedOrWishedNames.has(e.name)),
+    [visitedOrWishedNames]);
 
   if (wishes.length === 0) return (
     <div className="flex flex-col items-center justify-center py-32 text-stone-300">
@@ -1247,6 +1319,95 @@ const WishlistPage = ({ wishes, onEdit, onDelete, onVisited, onMapFocus }: {
           </div>
         ))}
       </div>
+      {/* ─── 未訪問の100名城・続100名城 ─── */}
+      {(unvisitedHyaku.length > 0 || unvisitedZoku.length > 0) && (
+        <div className="mt-8">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="h-px flex-1 bg-stone-200" />
+            <span className="text-[11px] font-black text-stone-400 uppercase tracking-widest">未訪問の名城</span>
+            <div className="h-px flex-1 bg-stone-200" />
+          </div>
+          <p className="text-[11px] text-stone-400 mb-5 text-center">個別登録・訪問済みを除いた100名城・続100名城です。訪問済みへ移動できます。</p>
+
+          {/* 100名城セクション */}
+          {unvisitedHyaku.length > 0 && (
+            <div className="mb-6">
+              <button
+                onClick={() => setShowHyaku(v => !v)}
+                className="flex items-center gap-2 mb-3 group">
+                <span className="text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-300 px-3 py-1 rounded-full">
+                  🏅 100名城 未訪問 {unvisitedHyaku.length}城
+                </span>
+                <span className="text-[10px] text-stone-400">{showHyaku ? "▲ 閉じる" : "▼ 開く"}</span>
+              </button>
+              {showHyaku && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {unvisitedHyaku.map((entry) => (
+                    <div key={entry.no}
+                      className="bg-amber-50/60 border border-amber-100 rounded-[20px] p-4 flex items-center justify-between gap-3 hover:border-amber-300 transition-all">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-black text-amber-600 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-full">
+                            No.{entry.no}
+                          </span>
+                          <span className="text-[10px] font-black text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full truncate">
+                            {entry.pref}
+                          </span>
+                        </div>
+                        <p className="font-black text-stone-800 text-sm truncate">{entry.name}</p>
+                      </div>
+                      <button
+                        onClick={() => onMeijoVisited(entry, "100名城")}
+                        className="shrink-0 flex items-center gap-1 py-1.5 px-3 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-black hover:bg-amber-200 transition-all">
+                        <CheckCircle size={11} /> 訪問済みへ
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 続100名城セクション */}
+          {unvisitedZoku.length > 0 && (
+            <div className="mb-6">
+              <button
+                onClick={() => setShowZoku(v => !v)}
+                className="flex items-center gap-2 mb-3 group">
+                <span className="text-[11px] font-black text-stone-600 bg-stone-100 border border-stone-300 px-3 py-1 rounded-full">
+                  🎖 続100名城 未訪問 {unvisitedZoku.length}城
+                </span>
+                <span className="text-[10px] text-stone-400">{showZoku ? "▲ 閉じる" : "▼ 開く"}</span>
+              </button>
+              {showZoku && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {unvisitedZoku.map((entry) => (
+                    <div key={entry.no}
+                      className="bg-stone-50/80 border border-stone-150 rounded-[20px] p-4 flex items-center justify-between gap-3 hover:border-stone-300 transition-all">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-black text-stone-500 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded-full">
+                            No.{entry.no}
+                          </span>
+                          <span className="text-[10px] font-black text-stone-600 bg-stone-50 border border-stone-200 px-2 py-0.5 rounded-full truncate">
+                            {entry.pref}
+                          </span>
+                        </div>
+                        <p className="font-black text-stone-800 text-sm truncate">{entry.name}</p>
+                      </div>
+                      <button
+                        onClick={() => onMeijoVisited(entry, "続100名城")}
+                        className="shrink-0 flex items-center gap-1 py-1.5 px-3 bg-stone-100 text-stone-600 border border-stone-300 rounded-full text-[10px] font-black hover:bg-stone-200 transition-all">
+                        <CheckCircle size={11} /> 訪問済みへ
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
@@ -1486,6 +1647,31 @@ export default function App() {
       const newId = ref.id;
       setCurrentPage("list");
       setRecordTab(type);
+      setSearchTerm("");
+      setHighlightId(newId);
+      setTimeout(() => {
+        const el = document.getElementById(`castle-card-${newId}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 500);
+    } catch (err) { console.error(err); }
+  };
+
+  // ─── 未訪問名城カードから訪問済みへ ────────────────────
+  const handleMeijoVisited = async (entry: MeijoEntry, category: MeijoCategory) => {
+    if (!window.confirm(`「${entry.name}」を訪問済みに移動しますか？`)) return;
+    try {
+      const ref = doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
+      await setDoc(ref, {
+        name: entry.name, pref: entry.pref, province: "", address: "",
+        aka: "", visitDate: "", battleYear: "", rating: 5, memo: "", photo: "",
+        recordType: "castle" as RecordType,
+        lat: null, lng: null, manualCoord: false,
+        meijoCategory: category,
+        updatedAt: new Date().toISOString(),
+      });
+      const newId = ref.id;
+      setCurrentPage("list");
+      setRecordTab("castle");
       setSearchTerm("");
       setHighlightId(newId);
       setTimeout(() => {
@@ -1814,6 +2000,7 @@ export default function App() {
         {currentPage === "wishlist" && (
           <WishlistPage
             wishes={wishes}
+            castles={castles}
             onEdit={openWishForm}
             onDelete={async (id, name) => {
               if (window.confirm(`「${name}」をリストから削除しますか？`))
@@ -1821,6 +2008,7 @@ export default function App() {
             }}
             onVisited={handleMoveToVisited}
             onMapFocus={(id) => { setFocusWishId(id); setCurrentPage("map"); }}
+            onMeijoVisited={handleMeijoVisited}
           />
         )}
       </main>
