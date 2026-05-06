@@ -1553,21 +1553,19 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [formData.address]);
 
-  // ─── 城名から名城区分を自動検出（城種別=castle のみ） ──
+  // ─── 城名から名城区分を自動検出（新規入力時のみ・編集時はopenFormで確定済み） ──
   useEffect(() => {
+    if (editingId) return; // 編集時はopenForm側で確定済みなのでスキップ
     if (formData.recordType !== "castle" || !formData.name) return;
     const detected = detectMeijo(formData.name);
-    if (detected && !formData.meijoCategory) {
-      setFormData(f => ({ ...f, meijoCategory: detected }));
-    }
+    setFormData(f => ({ ...f, meijoCategory: detected }));
   }, [formData.name, formData.recordType]);
 
   useEffect(() => {
+    if (editingWishId) return; // 編集時はopenWishForm側で確定済みなのでスキップ
     if (wishFormData.wishType !== "castle" || !wishFormData.name) return;
     const detected = detectMeijo(wishFormData.name);
-    if (detected && !wishFormData.meijoCategory) {
-      setWishFormData(f => ({ ...f, meijoCategory: detected }));
-    }
+    setWishFormData(f => ({ ...f, meijoCategory: detected }));
   }, [wishFormData.name, wishFormData.wishType]);
 
   // ─── 訪問記録 保存 ────────────────────────────────────
@@ -1713,11 +1711,14 @@ export default function App() {
 
   const openForm = (castle?: any) => {
     if (castle) {
+      // 編集時：リストと照合してmeijoを反映（リストが正、不一致なら「なし」）
+      const meijoCategory: MeijoCategory = castle.recordType !== "battlefield" ? detectMeijo(castle.name) : "";
       setFormData({
-        ...emptyForm, ...castle,
+        ...emptyForm, ...castle,         // castleの値を展開
         visitDate: normalizeDate(castle.visitDate),
         lat: castle.lat ?? null,
         lng: castle.lng ?? null,
+        meijoCategory,                   // 最後にリスト照合値で上書き
       });
       setPhotoPreview(castle.photo || "");
       setEditingId(castle.id);
@@ -1730,11 +1731,13 @@ export default function App() {
 
   const openWishForm = (w?: any) => {
     if (w) {
+      // 編集時：リストと照合してmeijoを反映（リストが正、不一致なら「なし」）
+      const meijoCategory: MeijoCategory = w.wishType !== "battlefield" ? detectMeijo(w.name) : "";
       setWishFormData({
         name: w.name, pref: w.pref||"", province: w.province||"",
         address: w.address||"", memo: w.memo||"",
         priority: w.priority||"中", wishType: w.wishType||"castle",
-        meijoCategory: (w.meijoCategory||"") as MeijoCategory
+        meijoCategory,
       });
       setEditingWishId(w.id);
     } else {
