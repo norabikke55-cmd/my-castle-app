@@ -524,7 +524,7 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
           <h3 className="font-black text-stone-800 mb-4 text-sm">🏆 名城スタンプ</h3>
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-amber-50 rounded-[16px] p-4 border border-amber-200">
-              <div className="text-2xl mb-1">🥇</div>
+              <div className="text-2xl mb-1">🏅</div>
               <div className="text-2xl font-black text-amber-600">
                 {hyakuCount}<span className="text-sm font-normal text-stone-400 ml-1">/ 100城</span>
               </div>
@@ -536,7 +536,7 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
               )}
             </div>
             <div className="bg-stone-50 rounded-[16px] p-4 border border-stone-200">
-              <div className="text-2xl mb-1">🥈</div>
+              <div className="text-2xl mb-1">🎖</div>
               <div className="text-2xl font-black text-stone-600">
                 {zokuCount}<span className="text-sm font-normal text-stone-400 ml-1">/ 100城</span>
               </div>
@@ -1197,12 +1197,12 @@ const WishlistPage = ({ wishes, onEdit, onDelete, onVisited, onMapFocus }: {
                 </span>
                 {w.meijoCategory === "100名城" && (
                   <span className="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full">
-                    🥇 100名城
+                    100名城
                   </span>
                 )}
                 {w.meijoCategory === "続100名城" && (
                   <span className="text-[10px] font-black text-stone-600 bg-stone-100 border border-stone-300 px-2.5 py-1 rounded-full">
-                    🥈 続100名城
+                    続100名城
                   </span>
                 )}
               </div>
@@ -1699,12 +1699,12 @@ export default function App() {
                           )}
                           {castle.meijoCategory === "100名城" && (
                             <span className="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full">
-                              🥇 100名城
+                              100名城
                             </span>
                           )}
                           {castle.meijoCategory === "続100名城" && (
                             <span className="text-[10px] font-black text-stone-600 bg-stone-100 border border-stone-300 px-2.5 py-1 rounded-full">
-                              🥈 続100名城
+                              続100名城
                             </span>
                           )}
                         </div>
@@ -2013,7 +2013,7 @@ export default function App() {
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">名城区分</label>
                     <div className="flex gap-2">
-                      {([["100名城","🥇"],["続100名城","🥈"],["","−"]] as [MeijoCategory,string][]).map(([cat, icon]) => (
+                      {([["100名城","🏅"],["続100名城","🎖"],["","−"]] as [MeijoCategory,string][]).map(([cat, icon]) => (
                         <button key={cat} type="button"
                           onClick={() => setFormData(f => ({ ...f, meijoCategory: cat }))}
                           className={`flex-1 py-2.5 rounded-[14px] text-[11px] font-black border transition-all ${
@@ -2189,7 +2189,7 @@ export default function App() {
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">名城区分</label>
                     <div className="flex gap-2">
-                      {([["100名城","🥇"],["続100名城","🥈"],["","−"]] as [MeijoCategory,string][]).map(([cat, icon]) => (
+                      {([["100名城","🏅"],["続100名城","🎖"],["","−"]] as [MeijoCategory,string][]).map(([cat, icon]) => (
                         <button key={cat} type="button"
                           onClick={() => setWishFormData(f => ({ ...f, meijoCategory: cat }))}
                           className={`flex-1 py-2.5 rounded-[14px] text-[11px] font-black border transition-all ${
