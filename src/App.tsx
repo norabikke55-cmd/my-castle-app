@@ -514,11 +514,9 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const StatsPage = ({ castles }: { castles: any[] }) => {
   const visited = castles.filter(c => c.recordType !== "battlefield");
   const battlefields = castles.filter(c => c.recordType === "battlefield");
-  // 城名照合 OR 手動設定meijoCategory どちらかでカウント
-  const hyakuCount = visited.filter(c =>
-    HYAKU_MEIJO.has(c.name) || c.meijoCategory === "100名城").length;
-  const zokuCount  = visited.filter(c =>
-    ZOKU_MEIJO.has(c.name)  || c.meijoCategory === "続100名城").length;
+  // 城名でリスト照合のみ（手動設定は無視・常に一貫した基準）
+  const hyakuCount = visited.filter(c => HYAKU_MEIJO.has(c.name)).length;
+  const zokuCount  = visited.filter(c => ZOKU_MEIJO.has(c.name)).length;
 
   // 訪問年別集計
   const yearData = useMemo(() => {
@@ -1215,8 +1213,7 @@ const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus
     });
   }, [wishes, sortKey]);
 
-  // 訪問済み・行きたいリストで「登録済み」とみなす条件：
-  // 城名一致 OR meijoCategory手動設定済み
+  // 城名でリスト照合のみ（訪問済み・行きたい両方の城名を除外）
   const visitedOrWishedNames = useMemo(() => {
     const s = new Set<string>();
     castles.forEach((c: any) => s.add(c.name));
@@ -1224,27 +1221,13 @@ const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus
     return s;
   }, [castles, wishes]);
 
-  // 手動でmeijoを設定した城のうち、城名がリストと一致しないものを別途除外
-  const manualHyakuVisited = useMemo(() =>
-    new Set([
-      ...castles.filter((c: any) => c.meijoCategory === "100名城").map((c: any) => c.name),
-      ...wishes.filter((w: any) => w.meijoCategory === "100名城").map((w: any) => w.name),
-    ]), [castles, wishes]);
-  const manualZokuVisited = useMemo(() =>
-    new Set([
-      ...castles.filter((c: any) => c.meijoCategory === "続100名城").map((c: any) => c.name),
-      ...wishes.filter((w: any) => w.meijoCategory === "続100名城").map((w: any) => w.name),
-    ]), [castles, wishes]);
-
-  // 未訪問の100名城・続100名城：城名照合 AND 手動設定 どちらかで除外
+  // 未訪問の100名城・続100名城：城名照合のみ
   const unvisitedHyaku = useMemo(() =>
-    HYAKU_LIST.filter(e =>
-      !visitedOrWishedNames.has(e.name) && !manualHyakuVisited.has(e.name)),
-    [visitedOrWishedNames, manualHyakuVisited]);
+    HYAKU_LIST.filter(e => !visitedOrWishedNames.has(e.name)),
+    [visitedOrWishedNames]);
   const unvisitedZoku = useMemo(() =>
-    ZOKU_LIST.filter(e =>
-      !visitedOrWishedNames.has(e.name) && !manualZokuVisited.has(e.name)),
-    [visitedOrWishedNames, manualZokuVisited]);
+    ZOKU_LIST.filter(e => !visitedOrWishedNames.has(e.name)),
+    [visitedOrWishedNames]);
 
   if (wishes.length === 0) return (
     <div className="flex flex-col items-center justify-center py-32 text-stone-300">
