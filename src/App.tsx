@@ -1602,9 +1602,15 @@ export default function App() {
         }
       }
 
+      // 保存時にリスト照合：一致すれば自動セット、不一致なら手動選択を尊重
+      const detectedMeijo = formData.recordType === "castle" ? detectMeijo(formData.name) : "";
+      const meijoCategoryFinal: MeijoCategory =
+        detectedMeijo !== "" ? detectedMeijo : formData.meijoCategory;
+
       await setDoc(ref, {
         ...formData,
         lat, lng,
+        meijoCategory: meijoCategoryFinal,
         visitDate: (formData.visitDate||"").replace(/\//g, "-"),
         updatedAt: new Date().toISOString()
       });
@@ -1621,7 +1627,16 @@ export default function App() {
       const ref = editingWishId
         ? doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", editingWishId)
         : doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes"));
-      await setDoc(ref, { ...wishFormData, updatedAt: new Date().toISOString() });
+      // 保存時にリスト照合：一致すれば自動セット、不一致なら手動選択を尊重
+      const detectedWishMeijo = wishFormData.wishType === "castle" ? detectMeijo(wishFormData.name) : "";
+      const wishMeijoCategoryFinal: MeijoCategory =
+        detectedWishMeijo !== "" ? detectedWishMeijo : wishFormData.meijoCategory;
+
+      await setDoc(ref, {
+        ...wishFormData,
+        meijoCategory: wishMeijoCategoryFinal,
+        updatedAt: new Date().toISOString()
+      });
       setIsWishFormOpen(false); setEditingWishId(null); setWishFormData(emptyWishForm);
     } catch (err) { console.error(err); }
     finally { setIsSaving(false); }
