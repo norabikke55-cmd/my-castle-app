@@ -49,6 +49,52 @@ const PREF_COORDS: Record<string, [number, number]> = {
 
 const PRIORITY_ORDER: Record<WishPriority, number> = { "高": 0, "中": 1, "低": 2 };
 
+// ─── 100名城・続100名城リスト（メモリ内のみ・Firestore容量不使用） ────
+type MeijoCategory = "100名城" | "続100名城" | "";
+
+// 日本100名城（番号順）
+const HYAKU_MEIJO = new Set([
+  "根室半島チャシ跡群","五稜郭","松前城","弘前城","根城","盛岡城","久保田城","山形城",
+  "白石城","仙台城","会津若松城","水戸城","足利氏館","箕輪城","金山城","鉢形城",
+  "川越城","江戸城","八王子城","小田原城","甲府城","躑躅ヶ崎館","松本城","上田城",
+  "小諸城","春日山城","高岡城","七尾城","丸岡城","一乗谷城","岐阜城","苗木城",
+  "犬山城","名古屋城","岡崎城","浜松城","掛川城","駿府城","山中城","韮山城",
+  "小谷城","長浜城","彦根城","安土城","観音寺城","二条城","大阪城","千早城",
+  "和歌山城","高取城","伊賀上野城","伊勢亀山城","松阪城","津城","鳥取城","米子城",
+  "月山富田城","松江城","津山城","備中松山城","鬼ノ城","岡山城","福山城","広島城",
+  "吉田郡山城","津和野城","萩城","岩国城","徳島城","高松城","丸亀城","今治城",
+  "湯築城","松山城","大洲城","宇和島城","高知城","福岡城","大野城","名護屋城",
+  "吉野ヶ里","佐賀城","唐津城","平戸城","島原城","熊本城","人吉城","大分府内城",
+  "岡城","飫肥城","鹿児島城","志布志城","今帰仁城","中城城","首里城","座喜味城"
+]);
+
+// 続日本100名城（番号順）
+const ZOKU_MEIJO = new Set([
+  "志苔館","上ノ国勝山館","蠣崎波響の居館","十勝山道中","浪岡城","九戸城","白河小峰城",
+  "唐沢山城","名胡桃城","沼田城","武蔵松山城","杉山城","菅谷館","忍城","本佐倉城",
+  "関宿城","佐倉城","小机城","玉縄城","石垣山城","津久井城","甲斐金山","高遠城",
+  "龍岡城","飯山城","富山城","増山城","鳥越城","大聖寺城","越前大野城","岩村城",
+  "美濃金山城","郡上八幡城","墨俣一夜城","長篠城","諏訪原城","高天神城","興国寺城",
+  "村木砦","小牧山城","長島城","大垣城","横山城","小谷城跡","賤ヶ岳","玄蕃尾城",
+  "大溝城","膳所城","水口岡山城","鎮守山城","八幡山城","伏見城","勝龍寺城","淀城",
+  "芥川山城","飯盛山城","高屋城","岸和田城","丹波亀山城","黒井城","篠山城","竹田城",
+  "洲本城","赤穂城","龍野城","三木城","郡山城","宇陀松山城","大和郡山城","吉野城",
+  "新宮城","鳥取城跡","岩屋城","浜田城","三原城","神辺城","若山城","岩国城跡",
+  "白地城","引田城","勝瑞城","天霧城","黒瀬城","河後森城","中村城","唐人駄場城",
+  "小倉城","麻生城","久留米城","大友府内町","角牟礼城","岡城跡","延岡城","佐土原城",
+  "知覧城","出水城","加世田城","島津氏久の館","勝連城","糸数城"
+]);
+
+// 名城区分を判定（城名で自動マッチング）
+const detectMeijo = (name: string): MeijoCategory => {
+  if (!name) return "";
+  // 「城」「館」等の末尾を除いた名称でも照合
+  const trimmed = name.replace(/\s/g, "");
+  if (HYAKU_MEIJO.has(trimmed)) return "100名城";
+  if (ZOKU_MEIJO.has(trimmed)) return "続100名城";
+  return "";
+};
+
 const PRIORITY_STYLE: Record<WishPriority, string> = {
   "高": "bg-rose-50 text-rose-700 border-rose-200",
   "中": "bg-amber-50 text-amber-700 border-amber-200",
@@ -384,6 +430,8 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 const StatsPage = ({ castles }: { castles: any[] }) => {
   const visited = castles.filter(c => c.recordType !== "battlefield");
   const battlefields = castles.filter(c => c.recordType === "battlefield");
+  const hyakuCount = visited.filter(c => c.meijoCategory === "100名城").length;
+  const zokuCount = visited.filter(c => c.meijoCategory === "続100名城").length;
 
   // 訪問年別集計
   const yearData = useMemo(() => {
@@ -437,6 +485,39 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
           </div>
         ))}
       </div>
+
+      {/* 名城カード */}
+      {(hyakuCount > 0 || zokuCount > 0) && (
+        <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
+          <h3 className="font-black text-stone-800 mb-4 text-sm">🏆 名城スタンプ</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-amber-50 rounded-[16px] p-4 border border-amber-200">
+              <div className="text-2xl mb-1">🥇</div>
+              <div className="text-2xl font-black text-amber-600">
+                {hyakuCount}<span className="text-sm font-normal text-stone-400 ml-1">/ 100城</span>
+              </div>
+              <div className="text-[11px] text-amber-700 font-black">100名城</div>
+              {hyakuCount > 0 && (
+                <div className="mt-1 h-1.5 bg-amber-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${(hyakuCount/100)*100}%` }} />
+                </div>
+              )}
+            </div>
+            <div className="bg-stone-50 rounded-[16px] p-4 border border-stone-200">
+              <div className="text-2xl mb-1">🥈</div>
+              <div className="text-2xl font-black text-stone-600">
+                {zokuCount}<span className="text-sm font-normal text-stone-400 ml-1">/ 100城</span>
+              </div>
+              <div className="text-[11px] text-stone-500 font-black">続100名城</div>
+              {zokuCount > 0 && (
+                <div className="mt-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                  <div className="h-full bg-stone-500 rounded-full transition-all" style={{ width: `${(zokuCount/100)*100}%` }} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 訪問年グラフ */}
       {yearData.length > 0 && (
@@ -1082,6 +1163,16 @@ const WishlistPage = ({ wishes, onEdit, onDelete, onVisited, onMapFocus }: {
                 <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${PRIORITY_STYLE[w.priority as WishPriority] || PRIORITY_STYLE["中"]}`}>
                   {w.priority || "中"}
                 </span>
+                {w.meijoCategory === "100名城" && (
+                  <span className="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full">
+                    🥇 100名城
+                  </span>
+                )}
+                {w.meijoCategory === "続100名城" && (
+                  <span className="text-[10px] font-black text-stone-600 bg-stone-100 border border-stone-300 px-2.5 py-1 rounded-full">
+                    🥈 続100名城
+                  </span>
+                )}
               </div>
             </div>
             <h3 className="text-lg font-black text-stone-900 leading-tight mb-1 flex items-center gap-1.5">
@@ -1151,12 +1242,14 @@ export default function App() {
     visitDate: "", battleYear: "", rating: 5, memo: "", photo: "",
     recordType: "castle" as RecordType,
     lat: null as number | null, lng: null as number | null,
-    manualCoord: false as boolean
+    manualCoord: false as boolean,
+    meijoCategory: "" as MeijoCategory
   };
   // ③ 行きたいリストに住所追加
   const emptyWishForm = {
     name: "", pref: "", province: "", address: "", memo: "",
-    priority: "中" as WishPriority, wishType: "castle" as RecordType
+    priority: "中" as WishPriority, wishType: "castle" as RecordType,
+    meijoCategory: "" as MeijoCategory
   };
   const [formData, setFormData] = useState<typeof emptyForm>(emptyForm);
   const [wishFormData, setWishFormData] = useState<typeof emptyWishForm>(emptyWishForm);
@@ -1267,6 +1360,23 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [formData.address]);
 
+  // ─── 城名から名城区分を自動検出（城種別=castle のみ） ──
+  useEffect(() => {
+    if (formData.recordType !== "castle" || !formData.name) return;
+    const detected = detectMeijo(formData.name);
+    if (detected && !formData.meijoCategory) {
+      setFormData(f => ({ ...f, meijoCategory: detected }));
+    }
+  }, [formData.name, formData.recordType]);
+
+  useEffect(() => {
+    if (wishFormData.wishType !== "castle" || !wishFormData.name) return;
+    const detected = detectMeijo(wishFormData.name);
+    if (detected && !wishFormData.meijoCategory) {
+      setWishFormData(f => ({ ...f, meijoCategory: detected }));
+    }
+  }, [wishFormData.name, wishFormData.wishType]);
+
   // ─── 訪問記録 保存 ────────────────────────────────────
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault(); if (!formData.name || isSaving) return;
@@ -1334,8 +1444,9 @@ export default function App() {
         name: w.name, pref: w.pref||"", province: w.province||"",
         address: w.address||"", aka: "", visitDate: "", battleYear: "",
         rating: 5, memo: w.memo||"", photo: "", recordType: type,
-        // 行きたい城の座標・手動設定フラグも引き継ぐ
+        // 行きたい城の座標・手動設定フラグ・名城区分も引き継ぐ
         lat: w.lat||null, lng: w.lng||null, manualCoord: w.manualCoord||false,
+        meijoCategory: w.meijoCategory||"",
         updatedAt: new Date().toISOString(),
       });
       await deleteDoc(doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", w.id));
@@ -1389,7 +1500,8 @@ export default function App() {
       setWishFormData({
         name: w.name, pref: w.pref||"", province: w.province||"",
         address: w.address||"", memo: w.memo||"",
-        priority: w.priority||"中", wishType: w.wishType||"castle"
+        priority: w.priority||"中", wishType: w.wishType||"castle",
+        meijoCategory: (w.meijoCategory||"") as MeijoCategory
       });
       setEditingWishId(w.id);
     } else {
@@ -1551,6 +1663,16 @@ export default function App() {
                           {castle.province && (
                             <span className="text-[10px] font-black text-stone-600 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-full">
                               {castle.province}
+                            </span>
+                          )}
+                          {castle.meijoCategory === "100名城" && (
+                            <span className="text-[10px] font-black text-amber-700 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-full">
+                              🥇 100名城
+                            </span>
+                          )}
+                          {castle.meijoCategory === "続100名城" && (
+                            <span className="text-[10px] font-black text-stone-600 bg-stone-100 border border-stone-300 px-2.5 py-1 rounded-full">
+                              🥈 続100名城
                             </span>
                           )}
                         </div>
@@ -1854,6 +1976,31 @@ export default function App() {
                     value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
                 </div>
 
+                {/* 名城区分（城種別のみ表示） */}
+                {formData.recordType === "castle" && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">名城区分</label>
+                    <div className="flex gap-2">
+                      {([["100名城","🥇"],["続100名城","🥈"],["","−"]] as [MeijoCategory,string][]).map(([cat, icon]) => (
+                        <button key={cat} type="button"
+                          onClick={() => setFormData(f => ({ ...f, meijoCategory: cat }))}
+                          className={`flex-1 py-2.5 rounded-[14px] text-[11px] font-black border transition-all ${
+                            formData.meijoCategory === cat
+                              ? cat === "100名城" ? "bg-amber-500 text-white border-amber-500 shadow"
+                              : cat === "続100名城" ? "bg-stone-500 text-white border-stone-500 shadow"
+                              : "bg-stone-100 text-stone-600 border-stone-300 shadow"
+                              : "bg-stone-50 text-stone-400 border-stone-200"
+                          }`}>
+                          {icon} {cat || "なし"}
+                        </button>
+                      ))}
+                    </div>
+                    {formData.meijoCategory && (
+                      <p className="text-[10px] text-stone-400 ml-1">城名から自動検出されました。変更も可能です。</p>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <label htmlFor="f-aka" className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">別名</label>
@@ -2004,6 +2151,28 @@ export default function App() {
                     className="w-full p-4 bg-stone-50 rounded-[18px] border border-transparent font-black text-stone-900 outline-none focus:bg-white focus:border-stone-200 transition-colors"
                     value={wishFormData.name} onChange={(e) => setWishFormData({ ...wishFormData, name: e.target.value })} />
                 </div>
+
+                {/* 名城区分（城種別のみ表示） */}
+                {wishFormData.wishType === "castle" && (
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-stone-400 uppercase tracking-[0.2em] ml-1">名城区分</label>
+                    <div className="flex gap-2">
+                      {([["100名城","🥇"],["続100名城","🥈"],["","−"]] as [MeijoCategory,string][]).map(([cat, icon]) => (
+                        <button key={cat} type="button"
+                          onClick={() => setWishFormData(f => ({ ...f, meijoCategory: cat }))}
+                          className={`flex-1 py-2.5 rounded-[14px] text-[11px] font-black border transition-all ${
+                            wishFormData.meijoCategory === cat
+                              ? cat === "100名城" ? "bg-amber-500 text-white border-amber-500 shadow"
+                              : cat === "続100名城" ? "bg-stone-500 text-white border-stone-500 shadow"
+                              : "bg-stone-100 text-stone-600 border-stone-300 shadow"
+                              : "bg-stone-50 text-stone-400 border-stone-200"
+                          }`}>
+                          {icon} {cat || "なし"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* 住所（都道府県・旧国名を自動取得） */}
                 <div className="space-y-1.5">
