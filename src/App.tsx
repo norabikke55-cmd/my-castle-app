@@ -611,8 +611,8 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
                   <span className="text-[10px] font-black text-amber-600 leading-none">城</span>
                 </div>
                 <div className="min-w-0">
-                  <p className="text-base font-black text-stone-800 truncate">{name}</p>
-                  <p className="text-[11px] text-stone-500">{date.replace(/-/g, "/")}</p>
+                  <p className="text-base font-black text-stone-700">{date.replace(/-/g, "/")}</p>
+                  <p className="text-sm font-bold text-stone-500 truncate">{name}</p>
                 </div>
               </div>
             ))}
