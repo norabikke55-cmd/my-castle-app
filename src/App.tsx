@@ -518,6 +518,31 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
   const hyakuCount = visited.filter(c => HYAKU_MEIJO.has(c.name)).length;
   const zokuCount  = visited.filter(c => ZOKU_MEIJO.has(c.name)).length;
 
+  // 城名不一致チェック：meijoCategoryが設定されているがリストと一致しない城
+  const mismatchHyaku = visited.filter(c =>
+    c.meijoCategory === "100名城" && !HYAKU_MEIJO.has(c.name));
+  const mismatchZoku = visited.filter(c =>
+    c.meijoCategory === "続100名城" && !ZOKU_MEIJO.has(c.name));
+
+  // 100城ごとの到達日
+  const milestones = useMemo(() => {
+    // 訪問日が入力されている城のみ、日付順にソート
+    const withDate = visited
+      .filter(c => c.visitDate && c.visitDate.length >= 4)
+      .sort((a, b) => a.visitDate.localeCompare(b.visitDate));
+
+    const results: { count: number; date: string; name: string }[] = [];
+    const milestoneNums = [100, 200, 300, 400, 500];
+    milestoneNums.forEach(n => {
+      if (withDate.length >= n) {
+        const c = withDate[n - 1];
+        results.push({ count: n, date: c.visitDate, name: c.name });
+      }
+    });
+    // 現在の訪問数（訪問日あり）も参考表示
+    return { milestones: results, totalWithDate: withDate.length };
+  }, [visited]);
+
   // 訪問年別集計
   const yearData = useMemo(() => {
     const map: Record<string, { castle: number; battlefield: number }> = {};
@@ -572,6 +597,29 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
       </div>
 
       {/* 名城カード */}
+      {/* 100城到達マイルストーン */}
+      {milestones.milestones.length > 0 && (
+        <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
+          <h3 className="font-black text-stone-800 mb-1 text-sm">🏯 訪問マイルストーン</h3>
+          <p className="text-[11px] text-stone-400 mb-4">城のみ・訪問日入力済み {milestones.totalWithDate}城が対象</p>
+          <div className="space-y-2.5">
+            {milestones.milestones.map(({ count, date, name }) => (
+              <div key={count} className="flex items-center gap-3 bg-stone-50 rounded-[14px] px-4 py-3 border border-stone-100">
+                <div className="shrink-0 w-14 h-14 rounded-full bg-amber-100 border-2 border-amber-400 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-black text-amber-600 leading-none">第</span>
+                  <span className="text-lg font-black text-amber-700 leading-none">{count}</span>
+                  <span className="text-[10px] font-black text-amber-600 leading-none">城</span>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-base font-black text-stone-800 truncate">{name}</p>
+                  <p className="text-[11px] text-stone-500">{date.replace(/-/g, "/")}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {(hyakuCount > 0 || zokuCount > 0) && (
         <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
           <h3 className="font-black text-stone-800 mb-4 text-sm">🏆 名城スタンプ</h3>
@@ -601,6 +649,46 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* 城名不一致リスト */}
+      {(mismatchHyaku.length > 0 || mismatchZoku.length > 0) && (
+        <div className="bg-white rounded-[20px] p-5 shadow-sm border border-rose-100">
+          <h3 className="font-black text-rose-700 mb-1 text-sm">⚠️ 名城区分：城名不一致</h3>
+          <p className="text-[11px] text-stone-400 mb-4">カードに「100名城」「続100名城」と表示されているが、登録城名が正式リストと一致しないため分析の訪問数にカウントされていません。編集画面で城名を正式名称に修正するか、名城区分を「なし」に変更してください。</p>
+          {mismatchHyaku.length > 0 && (
+            <div className="mb-3">
+              <div className="text-[11px] font-black text-amber-700 mb-2">🏅 100名城（{mismatchHyaku.length}件）</div>
+              <div className="space-y-1.5">
+                {mismatchHyaku.map((c: any) => (
+                  <div key={c.id} className="flex items-center justify-between bg-amber-50 border border-amber-100 rounded-[12px] px-3 py-2">
+                    <div>
+                      <span className="text-sm font-black text-stone-800">{c.name}</span>
+                      <span className="text-[10px] text-stone-400 ml-2">{c.pref}</span>
+                    </div>
+                    <span className="text-[10px] text-rose-500 font-black">リスト不一致</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {mismatchZoku.length > 0 && (
+            <div>
+              <div className="text-[11px] font-black text-stone-600 mb-2">🎖 続100名城（{mismatchZoku.length}件）</div>
+              <div className="space-y-1.5">
+                {mismatchZoku.map((c: any) => (
+                  <div key={c.id} className="flex items-center justify-between bg-stone-50 border border-stone-200 rounded-[12px] px-3 py-2">
+                    <div>
+                      <span className="text-sm font-black text-stone-800">{c.name}</span>
+                      <span className="text-[10px] text-stone-400 ml-2">{c.pref}</span>
+                    </div>
+                    <span className="text-[10px] text-rose-500 font-black">リスト不一致</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
