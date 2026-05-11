@@ -1215,13 +1215,13 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
           <div className="absolute bottom-10 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[10]">
             <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1.5">評価</p>
             {[
-              { color: "#B7410E", size: 16, label: "★★★★★" },
-              { color: "#d97706", size: 13, label: "★★★★" },
-              { color: "#7c6a56", size: 10, label: "★★★" },
-              { color: "#9ca3af", size: 8,  label: "★★以下" },
-            ].map(({ color, size, label }) => (
+              { color: "#B7410E", label: "★★★★★" },
+              { color: "#d97706", label: "★★★★" },
+              { color: "#7c6a56", label: "★★★" },
+              { color: "#9ca3af", label: "★★以下" },
+            ].map(({ color, label }) => (
               <div key={label} className="flex items-center gap-2 mb-1 last:mb-0">
-                <div style={{ background: color, width: size, height: size, borderRadius: "50%", border: "2px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)", flexShrink: 0 }} />
+                <div style={{ background: color, width: 12, height: 12, borderRadius: "50%", border: "2px solid white", boxShadow: "0 1px 3px rgba(0,0,0,0.3)", flexShrink: 0 }} />
                 <span className="text-[10px] font-bold text-stone-600">{label}</span>
               </div>
             ))}
