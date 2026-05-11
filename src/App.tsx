@@ -1443,7 +1443,14 @@ const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus
                             {entry.pref}
                           </span>
                         </div>
-                        <p className="font-black text-stone-800 text-sm truncate">{entry.name}</p>
+                        <p className="font-black text-stone-800 text-sm flex items-center gap-1">
+                          <span className="truncate">{entry.name}</span>
+                          <a href={`https://ja.wikipedia.org/wiki/${encodeURIComponent(entry.name)}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-stone-300 hover:text-stone-600 transition-colors shrink-0">
+                            <ExternalLink size={13} />
+                          </a>
+                        </p>
                       </div>
                       <button
                         onClick={() => onMeijoVisited(entry, "100名城")}
@@ -1482,7 +1489,14 @@ const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus
                             {entry.pref}
                           </span>
                         </div>
-                        <p className="font-black text-stone-800 text-sm truncate">{entry.name}</p>
+                        <p className="font-black text-stone-800 text-sm flex items-center gap-1">
+                          <span className="truncate">{entry.name}</span>
+                          <a href={`https://ja.wikipedia.org/wiki/${encodeURIComponent(entry.name)}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-stone-300 hover:text-stone-600 transition-colors shrink-0">
+                            <ExternalLink size={13} />
+                          </a>
+                        </p>
                       </div>
                       <button
                         onClick={() => onMeijoVisited(entry, "続100名城")}
