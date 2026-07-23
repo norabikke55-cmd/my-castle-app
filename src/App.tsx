@@ -804,7 +804,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   const [coordLatLng, setCoordLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const pendingFocusRef = useRef<string | null>(null);
   const geocodedWishIdsRef = useRef<Set<string>>(new Set()); // ジオコード済みwish IDを記録（ループ防止）
-  const mainRef = useRef<HTMLElement>(null); // メインスクロールコンテナ
+  const mainRef = useRef<HTMLElement | null>(null); // メインスクロールコンテナ
   const wishesRef = useRef<any[]>([]); // 最新wishesを常に参照（クロージャ問題回避）
   useEffect(() => { wishesRef.current = wishes || []; }, [wishes]);
   const castlesRef = useRef<any[]>([]); // 最新castlesを常に参照（クロージャ問題回避）
@@ -2013,7 +2013,7 @@ export default function App() {
       )}
 
       {/* ── メインコンテンツ ── */}
-      <main ref={mainRef} className={`flex-1 overflow-y-auto ${currentPage === "map" ? "" : "max-w-5xl mx-auto w-full p-4 md:p-6"}`}>
+      <main ref={(el) => { mainRef.current = el; }} className={`flex-1 overflow-y-auto ${currentPage === "map" ? "" : "max-w-5xl mx-auto w-full p-4 md:p-6"}`}>
 
         {/* ══ 訪問記録ページ ══ */}
         {currentPage === "list" && (
