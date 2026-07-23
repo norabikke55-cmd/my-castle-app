@@ -519,7 +519,10 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 
 // ─── 統計ページ ────────────────────────────────────────
-const StatsPage = ({ castles }: { castles: any[] }) => {
+const StatsPage = ({ castles, onNavigate }: {
+  castles: any[];
+  onNavigate: (sortKey: string) => void;
+}) => {
   const visited = castles.filter(c => c.recordType !== "battlefield");
   const battlefields = castles.filter(c => c.recordType === "battlefield");
   // 城名でリスト照合のみ（手動設定は無視・常に一貫した基準）
@@ -1909,8 +1912,18 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [wishFormData.address]);
 
+  // 初回選択時のデフォルト方向：名城系はasc（該当が上）、それ以外はdesc
+  const DEFAULT_DESC_KEYS = ["visitDate", "rating", "battleYear"];
   const toggleSort = (key: string) =>
-    setSortConfig((p) => ({ key, direction: p.key === key && p.direction === "desc" ? "asc" : "desc" }));
+    setSortConfig((p) => {
+      if (p.key === key) {
+        // 同じキーを再押し：反転
+        return { key, direction: p.direction === "desc" ? "asc" : "desc" };
+      }
+      // 新しいキー：デフォルト方向を決定
+      const direction = DEFAULT_DESC_KEYS.includes(key) ? "desc" : "asc";
+      return { key, direction };
+    });
 
   const tabLabel = recordTab === "castle" ? "城" : "古戦場";
 
@@ -2142,7 +2155,11 @@ export default function App() {
             if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 300);
         }} />}
-        {currentPage === "stats" && <StatsPage castles={castles} />}
+        {currentPage === "stats" && <StatsPage castles={castles} onNavigate={(sortKey) => {
+          setCurrentPage("list");
+          setRecordTab("castle");
+          setSortConfig({ key: sortKey, direction: "asc" });
+        }} />}
         {/* マップは常時レンダリング・display:noneを使わない（サイズ0になりグレーになるため） */}
         <div style={{
           position: currentPage === "map" ? "relative" : "fixed",
