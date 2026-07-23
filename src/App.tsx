@@ -2143,6 +2143,11 @@ export default function App() {
           setCurrentPage("list");
           setRecordTab("castle");
           setSortConfig({ key: sortKey, direction: "asc" });
+          // 遷移後にスクロールコンテナを先頭に戻す
+          setTimeout(() => {
+            const main = document.querySelector("main");
+            if (main) main.scrollTo({ top: 0, behavior: "instant" });
+          }, 0);
         }} />}
         {/* マップは常時レンダリング・display:noneを使わない（サイズ0になりグレーになるため） */}
         <div style={{
