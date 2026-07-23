@@ -159,6 +159,14 @@ const ZOKU_LIST: MeijoEntry[] = [
 // Setはdetect用（高速照合）
 const HYAKU_MEIJO = new Set(HYAKU_LIST.map(e => e.name));
 const ZOKU_MEIJO  = new Set(ZOKU_LIST.map(e => e.name));
+
+// 現存12天守
+const GENZON_TENSHU = new Set([
+  // 国宝（5城）
+  "松本城","犬山城","彦根城","姫路城","松江城",
+  // 重要文化財（7城）
+  "弘前城","丸岡城","備中松山城","丸亀城","松山城","宇和島城","高知城",
+]);
 // 別名対応
 const MEIJO_ALIAS: Record<string, string> = {
   "躑躅ヶ崎館": "武田氏館", "青葉城": "仙台城", "鶴ヶ城": "会津若松城",
@@ -511,12 +519,16 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
 
 
 // ─── 統計ページ ────────────────────────────────────────
-const StatsPage = ({ castles }: { castles: any[] }) => {
+const StatsPage = ({ castles, onNavigate }: {
+  castles: any[];
+  onNavigate: (sortKey: string) => void;
+}) => {
   const visited = castles.filter(c => c.recordType !== "battlefield");
   const battlefields = castles.filter(c => c.recordType === "battlefield");
   // 城名でリスト照合のみ（手動設定は無視・常に一貫した基準）
-  const hyakuCount = visited.filter(c => HYAKU_MEIJO.has(c.name)).length;
-  const zokuCount  = visited.filter(c => ZOKU_MEIJO.has(c.name)).length;
+  const hyakuCount  = visited.filter(c => HYAKU_MEIJO.has(c.name)).length;
+  const zokuCount   = visited.filter(c => ZOKU_MEIJO.has(c.name)).length;
+  const genzonCount = visited.filter(c => GENZON_TENSHU.has(c.name)).length;
 
   // 城名不一致チェック：meijoCategoryが設定されているがリストと一致しない城
   const mismatchHyaku = visited.filter(c =>
@@ -620,34 +632,30 @@ const StatsPage = ({ castles }: { castles: any[] }) => {
         </div>
       )}
 
-      {(hyakuCount > 0 || zokuCount > 0) && (
+      {(hyakuCount > 0 || zokuCount > 0 || genzonCount > 0) && (
         <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
           <h3 className="font-black text-stone-800 mb-4 text-sm">🏆 名城スタンプ</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-amber-50 rounded-[16px] p-4 border border-amber-200">
-              <div className="text-2xl mb-1">🏅</div>
-              <div className="text-2xl font-black text-amber-600">
-                {hyakuCount}<span className="text-sm font-normal text-stone-400 ml-1">/ 100城</span>
-              </div>
-              <div className="text-[11px] text-amber-700 font-black">100名城</div>
-              {hyakuCount > 0 && (
-                <div className="mt-1 h-1.5 bg-amber-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${(hyakuCount/100)*100}%` }} />
+          <div className="grid grid-cols-3 gap-2">
+            {([
+              { key:"hyaku",  bg:"bg-amber-50", border:"border-amber-200", icon:"🏅", count:hyakuCount,  total:100, numColor:"text-amber-600", lblColor:"text-amber-700", barBg:"bg-amber-200", bar:"bg-amber-500", label:"100名城"  },
+              { key:"zoku",   bg:"bg-stone-50", border:"border-stone-200", icon:"🎖", count:zokuCount,   total:100, numColor:"text-stone-600", lblColor:"text-stone-500", barBg:"bg-stone-200", bar:"bg-stone-500", label:"続100名城"},
+              { key:"genzon", bg:"bg-sky-50",   border:"border-sky-200",   icon:"🏯", count:genzonCount, total:12,  numColor:"text-sky-700",   lblColor:"text-sky-700",   barBg:"bg-sky-200",   bar:"bg-sky-500",   label:"現存天守" },
+            ] as const).map(({ key, bg, border, icon, count, total, numColor, lblColor, barBg, bar, label }) => (
+              <button key={key} onClick={() => onNavigate(key)}
+                className={`${bg} rounded-[16px] p-3 border ${border} text-left w-full hover:opacity-75 active:scale-95 transition-all`}>
+                <div className="text-xl mb-1">{icon}</div>
+                <div className={`text-xl font-black ${numColor}`}>
+                  {count}<span className="text-xs font-normal text-stone-400 ml-0.5">/ {total}</span>
                 </div>
-              )}
-            </div>
-            <div className="bg-stone-50 rounded-[16px] p-4 border border-stone-200">
-              <div className="text-2xl mb-1">🎖</div>
-              <div className="text-2xl font-black text-stone-600">
-                {zokuCount}<span className="text-sm font-normal text-stone-400 ml-1">/ 100城</span>
-              </div>
-              <div className="text-[11px] text-stone-500 font-black">続100名城</div>
-              {zokuCount > 0 && (
-                <div className="mt-1 h-1.5 bg-stone-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-stone-500 rounded-full transition-all" style={{ width: `${(zokuCount/100)*100}%` }} />
-                </div>
-              )}
-            </div>
+                <div className={`text-[10px] ${lblColor} font-black mt-0.5`}>{label}</div>
+                {count > 0 && (
+                  <div className={`mt-1.5 h-1.5 ${barBg} rounded-full overflow-hidden`}>
+                    <div className={`h-full ${bar} rounded-full transition-all`} style={{ width: `${(count/total)*100}%` }} />
+                  </div>
+                )}
+                <div className="text-[9px] text-stone-400 mt-1.5">→ 一覧へ</div>
+              </button>
+            ))}
           </div>
         </div>
       )}
@@ -1615,6 +1623,27 @@ export default function App() {
         if (valA !== valB) return (valA < valB ? -1 : 1) * dir;
         // ① 評価が同じ場合は五十音順
         return jaSort(a.name || "", b.name || "");
+      } else if (sortConfig.key === "hyaku") {
+        // 100名城：一致するものを先に、その中は都道府県順
+        const aH = HYAKU_MEIJO.has(a.name) ? 0 : 1;
+        const bH = HYAKU_MEIJO.has(b.name) ? 0 : 1;
+        if (aH !== bH) return (aH - bH) * dir;
+        const pa = PREF_ORDER.indexOf(a.pref); const pb = PREF_ORDER.indexOf(b.pref);
+        return ((pa===-1?999:pa) - (pb===-1?999:pb));
+      } else if (sortConfig.key === "zoku") {
+        // 続100名城：一致するものを先に
+        const aZ = ZOKU_MEIJO.has(a.name) ? 0 : 1;
+        const bZ = ZOKU_MEIJO.has(b.name) ? 0 : 1;
+        if (aZ !== bZ) return (aZ - bZ) * dir;
+        const pa = PREF_ORDER.indexOf(a.pref); const pb = PREF_ORDER.indexOf(b.pref);
+        return ((pa===-1?999:pa) - (pb===-1?999:pb));
+      } else if (sortConfig.key === "genzon") {
+        // 現存12天守：一致するものを先に
+        const aG = GENZON_TENSHU.has(a.name) ? 0 : 1;
+        const bG = GENZON_TENSHU.has(b.name) ? 0 : 1;
+        if (aG !== bG) return (aG - bG) * dir;
+        const pa = PREF_ORDER.indexOf(a.pref); const pb = PREF_ORDER.indexOf(b.pref);
+        return ((pa===-1?999:pa) - (pb===-1?999:pb));
       } else if (sortConfig.key === "battleYear") {
         // ② 年順
         valA = parseInt(a.battleYear || "0"); valB = parseInt(b.battleYear || "0");
@@ -1867,8 +1896,18 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [wishFormData.address]);
 
+  // 初回選択時のデフォルト方向：名城系はasc（該当が上）、それ以外はdesc
+  const DEFAULT_DESC_KEYS = ["visitDate", "rating", "battleYear"];
   const toggleSort = (key: string) =>
-    setSortConfig((p) => ({ key, direction: p.key === key && p.direction === "desc" ? "asc" : "desc" }));
+    setSortConfig((p) => {
+      if (p.key === key) {
+        // 同じキーを再押し：反転
+        return { key, direction: p.direction === "desc" ? "asc" : "desc" };
+      }
+      // 新しいキー：デフォルト方向を決定
+      const direction = DEFAULT_DESC_KEYS.includes(key) ? "desc" : "asc";
+      return { key, direction };
+    });
 
   const tabLabel = recordTab === "castle" ? "城" : "古戦場";
 
@@ -1947,7 +1986,7 @@ export default function App() {
             {/* ソートボタン */}
             <div className="flex gap-2 overflow-x-auto pb-1">
               {(recordTab === "castle"
-                ? [{ label: "訪問日順", key: "visitDate" }, { label: "都道府県順", key: "pref" }, { label: "評価順", key: "rating" }]
+                ? [{ label: "訪問日順", key: "visitDate" }, { label: "都道府県順", key: "pref" }, { label: "評価順", key: "rating" }, { label: "100名城", key: "hyaku" }, { label: "続100名城", key: "zoku" }, { label: "現存天守", key: "genzon" }]
                 : [{ label: "訪問日順", key: "visitDate" }, { label: "都道府県順", key: "pref" }, { label: "評価順", key: "rating" }, { label: "年順", key: "battleYear" }]
               ).map((item) => (
                 <button key={item.key} onClick={() => toggleSort(item.key)}
@@ -2012,6 +2051,11 @@ export default function App() {
                           {castle.meijoCategory === "続100名城" && (
                             <span className="text-[10px] font-black text-stone-600 bg-stone-100 border border-stone-300 px-2.5 py-1 rounded-full">
                               続100名城
+                            </span>
+                          )}
+                          {GENZON_TENSHU.has(castle.name) && (
+                            <span className="text-[10px] font-black text-sky-700 bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-full">
+                              現存天守
                             </span>
                           )}
                         </div>
@@ -2095,7 +2139,16 @@ export default function App() {
             if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
           }, 300);
         }} />}
-        {currentPage === "stats" && <StatsPage castles={castles} />}
+        {currentPage === "stats" && <StatsPage castles={castles} onNavigate={(sortKey) => {
+          setCurrentPage("list");
+          setRecordTab("castle");
+          setSortConfig({ key: sortKey, direction: "asc" });
+          // 遷移後にスクロールコンテナを先頭に戻す
+          setTimeout(() => {
+            const main = document.querySelector("main");
+            if (main) main.scrollTo({ top: 0, behavior: "instant" });
+          }, 0);
+        }} />}
         {/* マップは常時レンダリング・display:noneを使わない（サイズ0になりグレーになるため） */}
         <div style={{
           position: currentPage === "map" ? "relative" : "fixed",
