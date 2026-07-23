@@ -636,42 +636,26 @@ const StatsPage = ({ castles, onNavigate }: {
         <div className="bg-white rounded-[20px] p-5 shadow-sm border border-stone-100">
           <h3 className="font-black text-stone-800 mb-4 text-sm">🏆 名城スタンプ</h3>
           <div className="grid grid-cols-3 gap-2">
-            <div className="bg-amber-50 rounded-[16px] p-3 border border-amber-200">
-              <div className="text-xl mb-1">🏅</div>
-              <div className="text-xl font-black text-amber-600">
-                {hyakuCount}<span className="text-xs font-normal text-stone-400 ml-0.5">/ 100</span>
-              </div>
-              <div className="text-[10px] text-amber-700 font-black mt-0.5">100名城</div>
-              {hyakuCount > 0 && (
-                <div className="mt-1.5 h-1.5 bg-amber-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${(hyakuCount/100)*100}%` }} />
+            {([
+              { key:"hyaku",  bg:"bg-amber-50", border:"border-amber-200", icon:"🏅", count:hyakuCount,  total:100, numColor:"text-amber-600", lblColor:"text-amber-700", barBg:"bg-amber-200", bar:"bg-amber-500", label:"100名城"  },
+              { key:"zoku",   bg:"bg-stone-50", border:"border-stone-200", icon:"🎖", count:zokuCount,   total:100, numColor:"text-stone-600", lblColor:"text-stone-500", barBg:"bg-stone-200", bar:"bg-stone-500", label:"続100名城"},
+              { key:"genzon", bg:"bg-sky-50",   border:"border-sky-200",   icon:"🏯", count:genzonCount, total:12,  numColor:"text-sky-700",   lblColor:"text-sky-700",   barBg:"bg-sky-200",   bar:"bg-sky-500",   label:"現存天守" },
+            ] as const).map(({ key, bg, border, icon, count, total, numColor, lblColor, barBg, bar, label }) => (
+              <button key={key} onClick={() => onNavigate(key)}
+                className={`${bg} rounded-[16px] p-3 border ${border} text-left w-full hover:opacity-75 active:scale-95 transition-all`}>
+                <div className="text-xl mb-1">{icon}</div>
+                <div className={`text-xl font-black ${numColor}`}>
+                  {count}<span className="text-xs font-normal text-stone-400 ml-0.5">/ {total}</span>
                 </div>
-              )}
-            </div>
-            <div className="bg-stone-50 rounded-[16px] p-3 border border-stone-200">
-              <div className="text-xl mb-1">🎖</div>
-              <div className="text-xl font-black text-stone-600">
-                {zokuCount}<span className="text-xs font-normal text-stone-400 ml-0.5">/ 100</span>
-              </div>
-              <div className="text-[10px] text-stone-500 font-black mt-0.5">続100名城</div>
-              {zokuCount > 0 && (
-                <div className="mt-1.5 h-1.5 bg-stone-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-stone-500 rounded-full transition-all" style={{ width: `${(zokuCount/100)*100}%` }} />
-                </div>
-              )}
-            </div>
-            <div className="bg-sky-50 rounded-[16px] p-3 border border-sky-200">
-              <div className="text-xl mb-1">🏯</div>
-              <div className="text-xl font-black text-sky-700">
-                {genzonCount}<span className="text-xs font-normal text-stone-400 ml-0.5">/ 12</span>
-              </div>
-              <div className="text-[10px] text-sky-700 font-black mt-0.5">現存天守</div>
-              {genzonCount > 0 && (
-                <div className="mt-1.5 h-1.5 bg-sky-200 rounded-full overflow-hidden">
-                  <div className="h-full bg-sky-500 rounded-full transition-all" style={{ width: `${(genzonCount/12)*100}%` }} />
-                </div>
-              )}
-            </div>
+                <div className={`text-[10px] ${lblColor} font-black mt-0.5`}>{label}</div>
+                {count > 0 && (
+                  <div className={`mt-1.5 h-1.5 ${barBg} rounded-full overflow-hidden`}>
+                    <div className={`h-full ${bar} rounded-full transition-all`} style={{ width: `${(count/total)*100}%` }} />
+                  </div>
+                )}
+                <div className="text-[9px] text-stone-400 mt-1.5">→ 一覧へ</div>
+              </button>
+            ))}
           </div>
         </div>
       )}
