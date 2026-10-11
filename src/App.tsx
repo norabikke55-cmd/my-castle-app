@@ -204,6 +204,7 @@ const stableHash = (str: string): number => {
 // 城跡データは public/osm-castles.json（© OpenStreetMap contributors）
 type OsmCastle = { name: string; lat: number; lng: number; pref: string; conf: "A" | "C"; meijo?: string };
 type NearbyKind = "wish" | "meijo" | "osm";
+type SearchOrigin = { lat: number; lng: number; mode: "gps" | "map" };
 type NearbyItem = {
   key: string; kind: NearbyKind; name: string; pref: string;
   lat: number; lng: number; km: number;
@@ -850,6 +851,8 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   const [locStatus, setLocStatus] = useState<"idle" | "loading" | "error">("idle");
   const [locError, setLocError] = useState("");
   const [radiusKm, setRadiusKm] = useState(10);
+  const [searchOrigin, setSearchOrigin] = useState<SearchOrigin | null>(null); // 検索の基準点（現在地 or 地図の中心）
+  const [viewCenter, setViewCenter] = useState<{ lat: number; lng: number } | null>(null); // いま表示している地図の中心
   const nearbyMarkersRef = useRef<any[]>([]);
   const userMarkerRef = useRef<any>(null);
   const tempMarkerRef = useRef<any>(null); // 100名城カードの「地図で見る」用の仮ピン
@@ -1277,6 +1280,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
       (pos) => {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserPos(p); setLocStatus("idle");
+        setSearchOrigin({ ...p, mode: "gps" });
         const map = mapInstanceRef.current;
         if (map) { map.setCenter(p); map.setZoom(zoomForRadius(radiusKm)); }
       },
@@ -1290,16 +1294,37 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
     );
   };
 
+  // いま地図に表示している中心を基準に、周辺の城を探す（地図は動かさない）
+  const searchHere = () => {
+    const map = mapInstanceRef.current; if (!map) return;
+    const c = map.getCenter(); if (!c) return;
+    setLocStatus("idle"); setLocError("");
+    setSearchOrigin({ lat: c.lat(), lng: c.lng(), mode: "map" });
+    setNearbyOpen(true);
+    // 引きすぎて範囲が見えないときだけ寄る
+    if ((map.getZoom() || 0) < zoomForRadius(radiusKm) - 1) map.setZoom(zoomForRadius(radiusKm));
+  };
+
+  // シートを開いている間、地図を動かすたびに「いまの中心」を記録（「この付近を探す」表示の判定用）
+  useEffect(() => {
+    if (!mapReady || !nearbyOpen || !mapInstanceRef.current) return;
+    const map = mapInstanceRef.current;
+    const update = () => { const c = map.getCenter(); if (c) setViewCenter({ lat: c.lat(), lng: c.lng() }); };
+    update();
+    const l = map.addListener("idle", update);
+    return () => { l.remove(); };
+  }, [mapReady, nearbyOpen]);
+
   // 範囲を変えたら、その範囲が見える縮尺にする
   useEffect(() => {
-    if (!nearbyOpen || !userPos || !mapInstanceRef.current) return;
-    mapInstanceRef.current.setCenter(userPos);
+    if (!nearbyOpen || !searchOrigin || !mapInstanceRef.current) return;
+    mapInstanceRef.current.setCenter({ lat: searchOrigin.lat, lng: searchOrigin.lng });
     mapInstanceRef.current.setZoom(zoomForRadius(radiusKm));
   }, [radiusKm]);
 
   // 訪問済み・行きたいと重複しない、周辺の城（近い順）
   const nearbyItems = useMemo<NearbyItem[]>(() => {
-    if (!userPos) return [];
+    if (!searchOrigin) return [];
     const known: { n: string; lat: number | null; lng: number | null }[] = [];
     [...(castles || []), ...(wishes || [])].forEach((c: any) => {
       const lat = typeof c.lat === "number" ? c.lat : null;
@@ -1317,12 +1342,12 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
     const out: NearbyItem[] = [];
     (wishes || []).forEach((w: any) => {
       if (typeof w.lat !== "number" || typeof w.lng !== "number") return;
-      const km = distKm(userPos, { lat: w.lat, lng: w.lng });
+      const km = distKm(searchOrigin, { lat: w.lat, lng: w.lng });
       if (km > radiusKm) return;
       out.push({ key: `w-${w.id}`, kind: "wish", name: w.name, pref: w.pref || "", lat: w.lat, lng: w.lng, km, badge: "行きたい", wish: w });
     });
     (osmCastles || []).forEach((c, i) => {
-      const km = distKm(userPos, c);
+      const km = distKm(searchOrigin, c);
       if (km > radiusKm) return;
       if (isKnown(c.name, c.lat, c.lng) || (c.meijo && isKnown(c.meijo, c.lat, c.lng))) return;
       const cat = c.meijo ? detectMeijo(c.meijo) : "";
@@ -1334,7 +1359,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
     });
     out.sort((a, b) => a.km - b.km);
     return out;
-  }, [userPos, radiusKm, castles, wishes, osmCastles]);
+  }, [searchOrigin, radiusKm, castles, wishes, osmCastles]);
 
   const showNearbyInfo = (it: NearbyItem, marker: any) => {
     const iw = infoWindowRef.current; const map = mapInstanceRef.current;
@@ -1357,15 +1382,32 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
     if (it.kind === "wish") openWishInfoWindow(it.wish, marker); else showNearbyInfo(it, marker);
   };
 
-  // 周辺の城・現在地のマーカー（行きたいは既存の緑ピンで表示済みなので重ねない）
+  // 周辺の城・現在地・検索範囲のマーカー（行きたいは既存の緑ピンで表示済みなので重ねない）
   useEffect(() => {
-    if (!mapReady || !nearbyOpen || !userPos || !mapInstanceRef.current) return;
+    if (!mapReady || !nearbyOpen || !searchOrigin || !mapInstanceRef.current) return;
     const google = (window as any).google;
     const map = mapInstanceRef.current;
-    userMarkerRef.current = new google.maps.Marker({
-      position: userPos, map, title: "現在地", zIndex: 2000,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: "#4285F4", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 3 },
+    // 検索範囲の円
+    const circle = new google.maps.Circle({
+      map, center: { lat: searchOrigin.lat, lng: searchOrigin.lng }, radius: radiusKm * 1000,
+      strokeColor: "#B7410E", strokeOpacity: 0.55, strokeWeight: 1.5,
+      fillColor: "#B7410E", fillOpacity: 0.05, clickable: false, zIndex: 1,
     });
+    // 地図の中心で探しているときは、中心に目印を出す
+    let centerMarker: any = null;
+    if (searchOrigin.mode === "map") {
+      centerMarker = new google.maps.Marker({
+        position: { lat: searchOrigin.lat, lng: searchOrigin.lng }, map, clickable: false, zIndex: 1500,
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 5, fillColor: "#B7410E", fillOpacity: 0.9, strokeColor: "#ffffff", strokeWeight: 2 },
+      });
+    }
+    // 現在地（青い点）：取得できているときは、地図の中心で探していても出す
+    if (userPos) {
+      userMarkerRef.current = new google.maps.Marker({
+        position: userPos, map, title: "現在地", zIndex: 2000,
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: "#4285F4", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 3 },
+      });
+    }
     nearbyItems.forEach((it) => {
       if (it.kind === "wish") return;
       const color = it.kind === "meijo" ? "#d97706" : it.conf === "A" ? "#2563eb" : "#94a3b8";
@@ -1378,17 +1420,23 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
       nearbyMarkersRef.current.push(m);
     });
     return () => {
+      circle.setMap(null);
+      if (centerMarker) centerMarker.setMap(null);
       nearbyMarkersRef.current.forEach((m) => m.setMap(null));
       nearbyMarkersRef.current = [];
       if (userMarkerRef.current) { userMarkerRef.current.setMap(null); userMarkerRef.current = null; }
     };
-  }, [nearbyItems, nearbyOpen, mapReady, userPos]);
+  }, [nearbyItems, nearbyOpen, mapReady, userPos, searchOrigin, radiusKm]);
 
   const nearbyBadgeClass = (it: NearbyItem): string =>
     it.kind === "wish" ? "bg-green-50 text-green-700 border-green-200"
     : it.kind === "meijo" ? "bg-amber-50 text-amber-700 border-amber-200"
     : it.conf === "A" ? "bg-blue-50 text-blue-700 border-blue-200"
     : "bg-stone-50 text-stone-500 border-stone-200";
+
+  // 地図を基準点から大きく動かしたら「この付近の城を探す」を出す
+  const showReSearch = nearbyOpen && locStatus !== "loading" && !!viewCenter &&
+    (!searchOrigin || distKm(viewCenter, searchOrigin) > Math.max(1, radiusKm * 0.4));
 
   const filteredCount = mapSearch.trim()
     ? castles.filter(c => (c.name+(c.aka||"")+(c.pref||"")).toLowerCase().includes(mapSearch.trim().toLowerCase())).length
@@ -1433,10 +1481,25 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
 
           {/* 近くの城ボタン（右上・検索バーの下） */}
           {!nearbyOpen && (
-            <button onClick={locate}
-              className="absolute top-14 right-3 z-[10] flex items-center gap-1 h-[33px] px-3 bg-white/95 backdrop-blur-sm rounded-xl border border-stone-200 shadow-md text-[11px] font-black text-stone-600 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-all whitespace-nowrap"
-              title="現在地の周辺にある城を表示">
-              📍 近くの城
+            <div className="absolute top-14 right-3 z-[10] flex flex-col items-end gap-1.5">
+              <button onClick={locate}
+                className="flex items-center gap-1 h-[33px] px-3 bg-white/95 backdrop-blur-sm rounded-xl border border-stone-200 shadow-md text-[11px] font-black text-stone-600 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-all whitespace-nowrap"
+                title="現在地の周辺にある城を表示">
+                📍 現在地の近く
+              </button>
+              <button onClick={searchHere}
+                className="flex items-center gap-1 h-[33px] px-3 bg-white/95 backdrop-blur-sm rounded-xl border border-stone-200 shadow-md text-[11px] font-black text-stone-600 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-all whitespace-nowrap"
+                title="いま表示している地図の中心の周辺にある城を表示">
+                🗺 この辺りの城
+              </button>
+            </div>
+          )}
+
+          {/* 地図を動かしたあとの再検索ボタン */}
+          {showReSearch && (
+            <button onClick={searchHere}
+              className="absolute top-14 left-1/2 -translate-x-1/2 z-[15] flex items-center gap-1 h-[33px] px-4 bg-[#B7410E] text-white rounded-full shadow-lg text-[11px] font-black whitespace-nowrap hover:bg-[#9a370c] transition-all">
+              🔍 この付近の城を探す
             </button>
           )}
 
@@ -1445,12 +1508,20 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
             <div className="absolute left-0 right-0 bottom-0 z-[20] bg-white rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.18)] flex flex-col" style={{ maxHeight: "46%" }}>
               <div className="px-4 pt-3 pb-2 shrink-0 border-b border-stone-100">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-[12px] font-black text-stone-800">
-                    📍 近くの城
-                    {userPos && locStatus === "idle" && <span className="ml-1.5 text-stone-400 font-bold">{nearbyItems.length}件</span>}
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <button onClick={locate} className="px-2.5 py-1 bg-stone-50 text-stone-500 border border-stone-200 rounded-full text-[10px] font-black hover:bg-stone-100">↻ 現在地を再取得</button>
+                  <div className="flex gap-1.5">
+                    <button onClick={locate}
+                      className={`px-3 py-1 rounded-full text-[10px] font-black border transition-all ${
+                        searchOrigin?.mode === "gps" ? "bg-stone-800 text-white border-stone-800" : "bg-white text-stone-500 border-stone-200 hover:border-stone-400"
+                      }`}>📍 現在地</button>
+                    <button onClick={searchHere}
+                      className={`px-3 py-1 rounded-full text-[10px] font-black border transition-all ${
+                        searchOrigin?.mode === "map" ? "bg-stone-800 text-white border-stone-800" : "bg-white text-stone-500 border-stone-200 hover:border-stone-400"
+                      }`}>🗺 地図の中心</button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {searchOrigin && locStatus === "idle" && (
+                      <span className="text-[10px] font-black text-stone-400">{nearbyItems.length}件</span>
+                    )}
                     <button onClick={() => setNearbyOpen(false)} className="p-1.5 text-stone-400 hover:text-stone-800 bg-stone-50 rounded-full"><X size={14} /></button>
                   </div>
                 </div>
@@ -1470,14 +1541,17 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
                   </div>
                 )}
                 {locStatus === "error" && (
-                  <p className="text-[11px] text-rose-500 font-bold py-4 px-2 leading-relaxed">{locError}</p>
+                  <p className="text-[11px] text-rose-500 font-bold py-3 px-2 leading-relaxed">
+                    {locError}<br />
+                    <span className="text-stone-400">地図を動かして「🗺 地図の中心」を押すと、表示中の場所の周辺を探せます。</span>
+                  </p>
                 )}
-                {locStatus === "idle" && userPos && nearbyItems.length === 0 && (
+                {locStatus === "idle" && searchOrigin && nearbyItems.length === 0 && (
                   <p className="text-[11px] text-stone-400 font-bold py-4 px-2 leading-relaxed">
                     半径{radiusKm}km以内に、未登録の城はありません。範囲を広げてみてください。
                   </p>
                 )}
-                {locStatus !== "error" && nearbyItems.slice(0, 50).map((it) => (
+                {locStatus !== "loading" && searchOrigin && nearbyItems.slice(0, 50).map((it) => (
                   <div key={it.key} className="flex items-center gap-2 py-2 border-b border-stone-50 last:border-0">
                     <button onClick={() => focusNearby(it)} className="flex-1 min-w-0 text-left">
                       <div className="flex items-center gap-1.5 mb-0.5">
@@ -1500,7 +1574,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
                 ))}
               </div>
               <p className="px-4 py-1.5 text-[9px] text-stone-400 border-t border-stone-100 shrink-0 leading-snug">
-                城跡データ © OpenStreetMap contributors ／ 「城跡?」は名前からの推定で、城と無関係な場所を含むことがあります
+                距離は{searchOrigin?.mode === "map" ? "地図の中心" : "現在地"}から測っています ／ 城跡データ © OpenStreetMap contributors ／ 「城跡?」は名前からの推定で、城と無関係な場所を含むことがあります
               </p>
             </div>
           )}
