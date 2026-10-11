@@ -200,6 +200,34 @@ const stableHash = (str: string): number => {
 };
 
 // ① 五十音順ソート用comparator
+// ─── 城跡データ（OpenStreetMap）／現在地周辺表示用 ─────────────
+// 城跡データは public/osm-castles.json（© OpenStreetMap contributors）
+type OsmCastle = { name: string; lat: number; lng: number; pref: string; conf: "A" | "C"; meijo?: string };
+type NearbyKind = "wish" | "meijo" | "osm";
+type NearbyItem = {
+  key: string; kind: NearbyKind; name: string; pref: string;
+  lat: number; lng: number; km: number;
+  badge: string; conf?: "A" | "C"; meijo?: string; wish?: any;
+};
+const distKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }): number => {
+  const R = 6371, rad = (x: number) => (x * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.pow(Math.sin(dLat / 2), 2) +
+    Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.pow(Math.sin(dLng / 2), 2);
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+const formatDist = (km: number): string => km < 1 ? `${Math.round(km * 1000)}m` : `${km.toFixed(1)}km`;
+// 城名の照合用（ヶ/ケの表記ゆれ、跡・址などの語尾を吸収）
+const normCastleName = (s: string): string =>
+  (s || "").replace(/[\s　]/g, "").replace(/[ヶヵ]/g, "ケ").replace(/(跡|址|阯|趾)$/, "");
+const escapeHtml = (s: string): string =>
+  String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const zoomForRadius = (km: number): number => (km <= 5 ? 13 : km <= 10 ? 12 : km <= 20 ? 11 : 10);
+const todayLocal = (): string => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const jaSort = (a: string, b: string) =>
   (a || "").localeCompare(b || "", "ja", { sensitivity: "base" });
 
@@ -782,7 +810,8 @@ const StatsPage = ({ castles, onNavigate }: {
   );
 };
 
-const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, onFocusHandled, isVisible }: {
+const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, onFocusHandled, isVisible,
+  osmCastles, meijoCoords, focusMeijo, onNearbyAddWish, onNearbyVisited, onWishVisited }: {
   castles: any[];
   wishes?: any[];
   onCastleSelect: (castle: any) => void;
@@ -790,6 +819,12 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   focusWishId?: string | null;
   onFocusHandled?: () => void;
   isVisible?: boolean;
+  osmCastles?: OsmCastle[];
+  meijoCoords?: Record<string, { lat: number; lng: number }>;
+  focusMeijo?: MeijoEntry | null;
+  onNearbyAddWish?: (item: NearbyItem) => void;
+  onNearbyVisited?: (item: NearbyItem) => void;
+  onWishVisited?: (wish: any) => void;
 }) => {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
@@ -809,6 +844,15 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
   const castlesRef = useRef<any[]>([]); // 最新castlesを常に参照（クロージャ問題回避）
   useEffect(() => { castlesRef.current = castles || []; }, [castles]);
   const [mapType, setMapType] = useState<"roadmap" | "satellite">("roadmap");
+  // 現在地周辺の城
+  const [nearbyOpen, setNearbyOpen] = useState(false);
+  const [userPos, setUserPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [locStatus, setLocStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [locError, setLocError] = useState("");
+  const [radiusKm, setRadiusKm] = useState(10);
+  const nearbyMarkersRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
+  const tempMarkerRef = useRef<any>(null); // 100名城カードの「地図で見る」用の仮ピン
 
   // Google Maps 初期化
   useEffect(() => {
@@ -923,13 +967,56 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
 
   // isVisible変化時：フォーカスなしでマップタブに来た時だけ名古屋にリセット
   useEffect(() => {
+    if (!isVisible && tempMarkerRef.current) { tempMarkerRef.current.setMap(null); tempMarkerRef.current = null; }
     if (!isVisible || !mapReady || !mapInstanceRef.current) return;
-    if (!focusCastleId && !focusWishId && !pendingFocusRef.current) {
+    if (!focusCastleId && !focusWishId && !focusMeijo && !pendingFocusRef.current) {
       infoWindowRef.current?.close();
       mapInstanceRef.current.setCenter({ lat: 35.180, lng: 136.907 });
       mapInstanceRef.current.setZoom(10);
     }
   }, [isVisible]);
+
+  // 100名城カードの「地図で見る」：座標が分かればそこへ。無い城は押したときだけGoogle検索で位置を出す（保存しない）
+  useEffect(() => {
+    if (!mapReady || !focusMeijo || !mapInstanceRef.current) return;
+    const google = (window as any).google;
+    const map = mapInstanceRef.current;
+    const entry = focusMeijo;
+    const category = HYAKU_MEIJO.has(entry.name) ? "100名城" : "続100名城";
+    const show = (lat: number, lng: number, approx: boolean) => {
+      if (tempMarkerRef.current) tempMarkerRef.current.setMap(null);
+      const marker = new google.maps.Marker({
+        position: { lat, lng }, map, title: entry.name, zIndex: 999,
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 10, fillColor: "#d97706", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 3 },
+      });
+      tempMarkerRef.current = marker;
+      map.setCenter({ lat, lng });
+      map.setZoom(14);
+      const iw = infoWindowRef.current;
+      if (iw) {
+        iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:200px">
+          <div style="font-weight:900;font-size:11px;color:#d97706">🏅 ${category} No.${entry.no}</div>
+          <div style="font-weight:900;font-size:13px;color:#374151">${escapeHtml(entry.name)}</div>
+          <div style="font-size:11px;color:#6b7280">${escapeHtml(entry.pref)}</div>
+          ${approx ? `<div style="font-size:10px;color:#9ca3af;margin-top:2px">位置はGoogle検索による目安です</div>` : ""}
+        </div>`);
+        iw.open(map, marker);
+      }
+    };
+    const known = meijoCoords?.[entry.name];
+    if (known) {
+      show(known.lat, known.lng, false);
+    } else {
+      resolveCoords(entry.name, "", entry.pref).then((r) => {
+        if (r) show(r.lat, r.lng, true);
+        else {
+          const pc = PREF_COORDS[entry.pref];
+          if (pc) { map.setCenter({ lat: pc[0], lng: pc[1] }); map.setZoom(10); }
+        }
+      });
+    }
+    onFocusHandled?.();
+  }, [focusMeijo, mapReady]);
 
   // ③ ポップアップ：×ボタンと城名同行、位置修正を★と同行
   const openInfoWindow = (castle: any, marker: any) => {
@@ -1178,6 +1265,131 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
     return () => { coordMapInstanceRef.current = null; };
   }, [editingCoord]);
 
+  // ─── 現在地周辺の城 ─────────────────────────────────
+  const locate = () => {
+    setNearbyOpen(true);
+    if (!navigator.geolocation) {
+      setLocStatus("error"); setLocError("このブラウザでは位置情報を利用できません");
+      return;
+    }
+    setLocStatus("loading"); setLocError("");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserPos(p); setLocStatus("idle");
+        const map = mapInstanceRef.current;
+        if (map) { map.setCenter(p); map.setZoom(zoomForRadius(radiusKm)); }
+      },
+      (err) => {
+        setLocStatus("error");
+        setLocError(err.code === 1
+          ? "位置情報の利用が許可されていません。ブラウザやスマホの設定で許可してください。"
+          : "現在地を取得できませんでした。電波の良い場所でもう一度お試しください。");
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
+    );
+  };
+
+  // 範囲を変えたら、その範囲が見える縮尺にする
+  useEffect(() => {
+    if (!nearbyOpen || !userPos || !mapInstanceRef.current) return;
+    mapInstanceRef.current.setCenter(userPos);
+    mapInstanceRef.current.setZoom(zoomForRadius(radiusKm));
+  }, [radiusKm]);
+
+  // 訪問済み・行きたいと重複しない、周辺の城（近い順）
+  const nearbyItems = useMemo<NearbyItem[]>(() => {
+    if (!userPos) return [];
+    const known: { n: string; lat: number | null; lng: number | null }[] = [];
+    [...(castles || []), ...(wishes || [])].forEach((c: any) => {
+      const lat = typeof c.lat === "number" ? c.lat : null;
+      const lng = typeof c.lng === "number" ? c.lng : null;
+      const nm = String(c.name || "").replace(/\s/g, "");
+      known.push({ n: normCastleName(nm), lat, lng });
+      if (MEIJO_ALIAS[nm]) known.push({ n: normCastleName(MEIJO_ALIAS[nm]), lat, lng }); // 別名（鶴ヶ城＝会津若松城 など）
+    });
+    const isKnown = (name: string, lat: number, lng: number): boolean => {
+      const n = normCastleName(name);
+      return known.some((k) =>
+        (n.length >= 2 && k.n === n) ||
+        (k.lat !== null && k.lng !== null && distKm({ lat: k.lat, lng: k.lng }, { lat, lng }) < 0.3));
+    };
+    const out: NearbyItem[] = [];
+    (wishes || []).forEach((w: any) => {
+      if (typeof w.lat !== "number" || typeof w.lng !== "number") return;
+      const km = distKm(userPos, { lat: w.lat, lng: w.lng });
+      if (km > radiusKm) return;
+      out.push({ key: `w-${w.id}`, kind: "wish", name: w.name, pref: w.pref || "", lat: w.lat, lng: w.lng, km, badge: "行きたい", wish: w });
+    });
+    (osmCastles || []).forEach((c, i) => {
+      const km = distKm(userPos, c);
+      if (km > radiusKm) return;
+      if (isKnown(c.name, c.lat, c.lng) || (c.meijo && isKnown(c.meijo, c.lat, c.lng))) return;
+      const cat = c.meijo ? detectMeijo(c.meijo) : "";
+      out.push({
+        key: `o-${i}`, kind: c.meijo ? "meijo" : "osm", name: c.meijo || c.name, pref: c.pref,
+        lat: c.lat, lng: c.lng, km, conf: c.conf, meijo: c.meijo,
+        badge: c.meijo ? (cat || "名城") : (c.conf === "A" ? "城跡" : "城跡?"),
+      });
+    });
+    out.sort((a, b) => a.km - b.km);
+    return out;
+  }, [userPos, radiusKm, castles, wishes, osmCastles]);
+
+  const showNearbyInfo = (it: NearbyItem, marker: any) => {
+    const iw = infoWindowRef.current; const map = mapInstanceRef.current;
+    if (!iw || !map) return;
+    iw.setContent(`<div style="font-family:sans-serif;padding:2px 4px 4px 0;min-width:120px;max-width:200px">
+      <div style="font-weight:900;font-size:13px;color:#374151">${escapeHtml(it.name)}</div>
+      <div style="font-size:10px;color:#6b7280">${escapeHtml(it.badge)}${it.pref ? " ・ " + escapeHtml(it.pref) : ""} ・ ${formatDist(it.km)}</div>
+    </div>`);
+    iw.open(map, marker);
+  };
+
+  const focusNearby = (it: NearbyItem) => {
+    const map = mapInstanceRef.current; if (!map) return;
+    map.panTo({ lat: it.lat, lng: it.lng });
+    map.setZoom(Math.max(map.getZoom() || 0, 14));
+    const marker = it.kind === "wish"
+      ? markersRef.current.find((m) => (m as any)._wishId === it.wish?.id)
+      : nearbyMarkersRef.current.find((m) => (m as any)._nearbyKey === it.key);
+    if (!marker) return;
+    if (it.kind === "wish") openWishInfoWindow(it.wish, marker); else showNearbyInfo(it, marker);
+  };
+
+  // 周辺の城・現在地のマーカー（行きたいは既存の緑ピンで表示済みなので重ねない）
+  useEffect(() => {
+    if (!mapReady || !nearbyOpen || !userPos || !mapInstanceRef.current) return;
+    const google = (window as any).google;
+    const map = mapInstanceRef.current;
+    userMarkerRef.current = new google.maps.Marker({
+      position: userPos, map, title: "現在地", zIndex: 2000,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: "#4285F4", fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 3 },
+    });
+    nearbyItems.forEach((it) => {
+      if (it.kind === "wish") return;
+      const color = it.kind === "meijo" ? "#d97706" : it.conf === "A" ? "#2563eb" : "#94a3b8";
+      const m = new google.maps.Marker({
+        position: { lat: it.lat, lng: it.lng }, map, title: it.name, zIndex: 50,
+        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 7, fillColor: color, fillOpacity: 1, strokeColor: "#ffffff", strokeWeight: 2 },
+      });
+      m.addListener("click", () => showNearbyInfo(it, m));
+      (m as any)._nearbyKey = it.key;
+      nearbyMarkersRef.current.push(m);
+    });
+    return () => {
+      nearbyMarkersRef.current.forEach((m) => m.setMap(null));
+      nearbyMarkersRef.current = [];
+      if (userMarkerRef.current) { userMarkerRef.current.setMap(null); userMarkerRef.current = null; }
+    };
+  }, [nearbyItems, nearbyOpen, mapReady, userPos]);
+
+  const nearbyBadgeClass = (it: NearbyItem): string =>
+    it.kind === "wish" ? "bg-green-50 text-green-700 border-green-200"
+    : it.kind === "meijo" ? "bg-amber-50 text-amber-700 border-amber-200"
+    : it.conf === "A" ? "bg-blue-50 text-blue-700 border-blue-200"
+    : "bg-stone-50 text-stone-500 border-stone-200";
+
   const filteredCount = mapSearch.trim()
     ? castles.filter(c => (c.name+(c.aka||"")+(c.pref||"")).toLowerCase().includes(mapSearch.trim().toLowerCase())).length
     : castles.length;
@@ -1219,8 +1431,82 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
             )}
           </div>
 
+          {/* 近くの城ボタン（右上・検索バーの下） */}
+          {!nearbyOpen && (
+            <button onClick={locate}
+              className="absolute top-14 right-3 z-[10] flex items-center gap-1 h-[33px] px-3 bg-white/95 backdrop-blur-sm rounded-xl border border-stone-200 shadow-md text-[11px] font-black text-stone-600 hover:bg-amber-50 hover:border-amber-300 hover:text-amber-700 transition-all whitespace-nowrap"
+              title="現在地の周辺にある城を表示">
+              📍 近くの城
+            </button>
+          )}
+
+          {/* 近くの城シート（下部） */}
+          {nearbyOpen && (
+            <div className="absolute left-0 right-0 bottom-0 z-[20] bg-white rounded-t-[24px] shadow-[0_-4px_24px_rgba(0,0,0,0.18)] flex flex-col" style={{ maxHeight: "46%" }}>
+              <div className="px-4 pt-3 pb-2 shrink-0 border-b border-stone-100">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[12px] font-black text-stone-800">
+                    📍 近くの城
+                    {userPos && locStatus === "idle" && <span className="ml-1.5 text-stone-400 font-bold">{nearbyItems.length}件</span>}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={locate} className="px-2.5 py-1 bg-stone-50 text-stone-500 border border-stone-200 rounded-full text-[10px] font-black hover:bg-stone-100">↻ 現在地を再取得</button>
+                    <button onClick={() => setNearbyOpen(false)} className="p-1.5 text-stone-400 hover:text-stone-800 bg-stone-50 rounded-full"><X size={14} /></button>
+                  </div>
+                </div>
+                <div className="flex gap-1.5 mt-2">
+                  {[5, 10, 20, 50].map((km) => (
+                    <button key={km} onClick={() => setRadiusKm(km)}
+                      className={`px-3 py-1 rounded-full text-[10px] font-black border transition-all ${
+                        radiusKm === km ? "bg-[#B7410E] text-white border-[#B7410E]" : "bg-white text-stone-500 border-stone-200 hover:border-stone-400"
+                      }`}>{km}km</button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-y-auto flex-1 px-3 py-1">
+                {locStatus === "loading" && (
+                  <div className="flex items-center justify-center gap-2 py-6 text-stone-400 text-xs font-black">
+                    <Loader2 className="animate-spin" size={16} /> 現在地を取得中...
+                  </div>
+                )}
+                {locStatus === "error" && (
+                  <p className="text-[11px] text-rose-500 font-bold py-4 px-2 leading-relaxed">{locError}</p>
+                )}
+                {locStatus === "idle" && userPos && nearbyItems.length === 0 && (
+                  <p className="text-[11px] text-stone-400 font-bold py-4 px-2 leading-relaxed">
+                    半径{radiusKm}km以内に、未登録の城はありません。範囲を広げてみてください。
+                  </p>
+                )}
+                {locStatus !== "error" && nearbyItems.slice(0, 50).map((it) => (
+                  <div key={it.key} className="flex items-center gap-2 py-2 border-b border-stone-50 last:border-0">
+                    <button onClick={() => focusNearby(it)} className="flex-1 min-w-0 text-left">
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full border ${nearbyBadgeClass(it)}`}>{it.badge}</span>
+                        <span className="text-[10px] text-stone-400 font-bold truncate">{it.pref ? `${it.pref} ・ ` : ""}{formatDist(it.km)}</span>
+                      </div>
+                      <p className="text-[13px] font-black text-stone-800 truncate">{it.name}</p>
+                    </button>
+                    {it.kind !== "wish" && (
+                      <button onClick={() => onNearbyAddWish?.(it)}
+                        className="shrink-0 flex items-center gap-1 py-1.5 px-2.5 bg-green-50 text-green-700 border border-green-200 rounded-full text-[10px] font-black hover:bg-green-100 transition-all">
+                        <Heart size={11} /> 行きたい
+                      </button>
+                    )}
+                    <button onClick={() => (it.kind === "wish" ? onWishVisited?.(it.wish) : onNearbyVisited?.(it))}
+                      className="shrink-0 flex items-center gap-1 py-1.5 px-2.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-black hover:bg-amber-100 transition-all">
+                      <CheckCircle size={11} /> 訪問済み
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="px-4 py-1.5 text-[9px] text-stone-400 border-t border-stone-100 shrink-0 leading-snug">
+                城跡データ © OpenStreetMap contributors ／ 「城跡?」は名前からの推定で、城と無関係な場所を含むことがあります
+              </p>
+            </div>
+          )}
+
           {/* 凡例（左下） */}
-          <div className="absolute bottom-10 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[10]">
+          <div className={`absolute bottom-10 left-3 bg-white/90 backdrop-blur-sm rounded-xl px-3 py-2.5 shadow-md border border-stone-200 z-[10] ${nearbyOpen ? "hidden" : ""}`}>
             <p className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-1.5">評価</p>
             {[
               { color: "#B7410E", label: "★★★★★" },
@@ -1280,7 +1566,7 @@ const MapPage = ({ castles, wishes, onCastleSelect, focusCastleId, focusWishId, 
 
 // ─── ウィッシュリストページ ─────────────────────────────
 
-const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus, onMeijoVisited }: {
+const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus, onMeijoVisited, onMeijoMapFocus }: {
   wishes: any[];
   castles: any[];
   onEdit: (w: any) => void;
@@ -1288,6 +1574,7 @@ const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus
   onVisited: (w: any) => void;
   onMapFocus: (id: string) => void;
   onMeijoVisited: (entry: MeijoEntry, category: MeijoCategory) => void;
+  onMeijoMapFocus: (entry: MeijoEntry) => void;
 }) => {
   const [sortKey, setSortKey] = useState<WishSortKey>("priority");
   const [showHyaku, setShowHyaku] = useState(true);
@@ -1460,11 +1747,17 @@ const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus
                           </a>
                         </p>
                       </div>
+                      <div className="shrink-0 flex items-center gap-1.5">
+                        <button onClick={() => onMeijoMapFocus(entry)}
+                          className="p-1.5 bg-white/80 text-stone-400 hover:text-green-600 hover:bg-green-50 border border-stone-200 rounded-full transition-all" title="地図で見る">
+                          <Map size={13} />
+                        </button>
                       <button
                         onClick={() => onMeijoVisited(entry, "100名城")}
                         className="shrink-0 flex items-center gap-1 py-1.5 px-3 bg-amber-100 text-amber-700 border border-amber-300 rounded-full text-[10px] font-black hover:bg-amber-200 transition-all">
                         <CheckCircle size={11} /> 訪問済みへ
                       </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1506,11 +1799,17 @@ const WishlistPage = ({ wishes, castles, onEdit, onDelete, onVisited, onMapFocus
                           </a>
                         </p>
                       </div>
+                      <div className="shrink-0 flex items-center gap-1.5">
+                        <button onClick={() => onMeijoMapFocus(entry)}
+                          className="p-1.5 bg-white/80 text-stone-400 hover:text-green-600 hover:bg-green-50 border border-stone-200 rounded-full transition-all" title="地図で見る">
+                          <Map size={13} />
+                        </button>
                       <button
                         onClick={() => onMeijoVisited(entry, "続100名城")}
                         className="shrink-0 flex items-center gap-1 py-1.5 px-3 bg-stone-100 text-stone-600 border border-stone-300 rounded-full text-[10px] font-black hover:bg-stone-200 transition-all">
                         <CheckCircle size={11} /> 訪問済みへ
                       </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1565,12 +1864,28 @@ export default function App() {
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [focusCastleId, setFocusCastleId] = useState<string | null>(null);
   const [focusWishId, setFocusWishId] = useState<string | null>(null);
+  const [focusMeijo, setFocusMeijo] = useState<MeijoEntry | null>(null);
+  const [osmCastles, setOsmCastles] = useState<OsmCastle[]>([]);
 
   // マップのwishポップアップから行きたい一覧へ戻るためのコールバック（windowグローバルを使わない安全な実装）
   useEffect(() => {
     (window as any).__goToWishlist = () => setCurrentPage("wishlist");
     return () => { (window as any).__goToWishlist = null; };
   }, [setCurrentPage]);
+
+  // 城跡データ（public/osm-castles.json）の読み込み。ファイルが無くてもアプリは通常通り動く
+  useEffect(() => {
+    fetch("/osm-castles.json")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((d) => { if (Array.isArray(d)) setOsmCastles(d as OsmCastle[]); })
+      .catch(() => { /* 読み込めなければ「近くの城」は行きたいリストのみ */ });
+  }, []);
+  // 100名城・続100名城の座標（城名→座標）
+  const meijoCoords = useMemo(() => {
+    const m: Record<string, { lat: number; lng: number }> = {};
+    osmCastles.forEach((c) => { if (c.meijo) m[c.meijo] = { lat: c.lat, lng: c.lng }; });
+    return m;
+  }, [osmCastles]);
 
   // ─── Firestore 読み込み（④ キャッシュ優先：初回もキャッシュから即表示） ──
   useEffect(() => {
@@ -1773,7 +2088,7 @@ export default function App() {
   };
 
   // ─── ウィッシュ → 訪問済みへ移動 ─────────────────────
-  const handleMoveToVisited = async (w: any) => {
+  const handleMoveToVisited = async (w: any, opts?: { stay?: boolean }) => {
     const type: RecordType = w.wishType || "castle";
     if (!window.confirm(`「${w.name}」を訪問済みに移動しますか？`)) return;
     try {
@@ -1788,16 +2103,18 @@ export default function App() {
         updatedAt: new Date().toISOString(),
       });
       await deleteDoc(doc(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes", w.id));
-      // 移動先カードを表示・ハイライト
-      const newId = ref.id;
-      setCurrentPage("list");
-      setRecordTab(type);
-      setSearchTerm("");
-      setHighlightId(newId);
-      setTimeout(() => {
-        const el = document.getElementById(`castle-card-${newId}`);
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }, 500);
+      // 移動先カードを表示・ハイライト（地図の「近くの城」から使うときは画面を移動しない）
+      if (!opts?.stay) {
+        const newId = ref.id;
+        setCurrentPage("list");
+        setRecordTab(type);
+        setSearchTerm("");
+        setHighlightId(newId);
+        setTimeout(() => {
+          const el = document.getElementById(`castle-card-${newId}`);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 500);
+      }
     } catch (err) { console.error(err); }
   };
 
@@ -1823,6 +2140,35 @@ export default function App() {
         const el = document.getElementById(`castle-card-${newId}`);
         if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
       }, 500);
+    } catch (err) { console.error(err); }
+  };
+
+  // ─── 地図の「近くの城」から 行きたい／訪問済み に登録 ──────
+  const handleNearbyAddWish = async (it: NearbyItem) => {
+    try {
+      const ref = doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "wishes"));
+      await setDoc(ref, {
+        name: it.name, pref: it.pref || "", province: "", address: "",
+        memo: "現在地周辺で発見", priority: "中", wishType: "castle" as RecordType,
+        meijoCategory: detectMeijo(it.meijo || it.name),
+        lat: it.lat, lng: it.lng,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) { console.error(err); }
+  };
+
+  const handleNearbyVisited = async (it: NearbyItem) => {
+    if (!window.confirm(`「${it.name}」を訪問済みにしますか？（訪問日は今日になります）`)) return;
+    try {
+      const ref = doc(collection(db, "artifacts", appId, "users", FIXED_USER_ID, "castles"));
+      await setDoc(ref, {
+        name: it.name, pref: it.pref || "", province: "", address: "",
+        aka: "", visitDate: todayLocal(), battleYear: "", rating: 5, memo: "", photo: "",
+        recordType: "castle" as RecordType,
+        lat: it.lat, lng: it.lng, manualCoord: false,
+        meijoCategory: detectMeijo(it.meijo || it.name),
+        updatedAt: new Date().toISOString(),
+      });
     } catch (err) { console.error(err); }
   };
 
@@ -2167,8 +2513,11 @@ export default function App() {
               if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
             }, 300);
           }} focusCastleId={focusCastleId} focusWishId={focusWishId}
-          onFocusHandled={() => { setFocusCastleId(null); setFocusWishId(null); }}
-          isVisible={currentPage === "map"} />
+          onFocusHandled={() => { setFocusCastleId(null); setFocusWishId(null); setFocusMeijo(null); }}
+          isVisible={currentPage === "map"}
+          osmCastles={osmCastles} meijoCoords={meijoCoords} focusMeijo={focusMeijo}
+          onNearbyAddWish={handleNearbyAddWish} onNearbyVisited={handleNearbyVisited}
+          onWishVisited={(w) => handleMoveToVisited(w, { stay: true })} />
 
         </div>
         {currentPage === "wishlist" && (
@@ -2183,6 +2532,7 @@ export default function App() {
             onVisited={handleMoveToVisited}
             onMapFocus={(id) => { setFocusWishId(id); setCurrentPage("map"); }}
             onMeijoVisited={handleMeijoVisited}
+            onMeijoMapFocus={(e) => { setFocusMeijo(e); setCurrentPage("map"); }}
           />
         )}
       </main>
